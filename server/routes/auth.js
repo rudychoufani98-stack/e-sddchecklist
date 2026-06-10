@@ -6,6 +6,7 @@ const router = express.Router();
 function getUsers() {
   return [
     { username: 'admin', password: process.env.ADMIN_PASSWORD, role: 'admin' },
+    { username: 'rudy.choufani@skykapital.com', password: process.env.RUDY_PASSWORD, role: 'admin' },
     { username: 'skykapital', password: process.env.SKYKAPITAL_PASSWORD, role: 'viewer' },
     { username: 'hitech', password: process.env.HITECH_PASSWORD, role: 'viewer' },
   ];
