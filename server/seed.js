@@ -26,13 +26,13 @@ const USERS = [
 ];
 
 async function seedIfNeeded() {
+  // Always upsert users so login always works
+  await supabase.from('users').upsert(USERS, { onConflict: 'username' });
+
   const { data: existing } = await supabase.from('sections').select('id').limit(1);
   if (existing && existing.length > 0) return;
 
   console.log('Seeding database...');
-
-  // Seed users
-  await supabase.from('users').upsert(USERS, { onConflict: 'username' });
 
   async function insertSection(name) {
     const { data } = await supabase.from('sections').insert({ name }).select('id').single();
