@@ -1,11 +1,7 @@
 {
   "buildCommand": "npm run build",
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "client/build/**"
-    }
-  },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index.js" }
+    { "source": "/api/:path*", "destination": "/api/index.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
