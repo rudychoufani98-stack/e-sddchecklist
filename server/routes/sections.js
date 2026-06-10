@@ -1,6 +1,6 @@
 const express = require('express');
 const supabase = require('../db');
-const { requireAuth } = require('../auth');
+const { requireAuth, requireAdmin } = require('../auth');
 const router = express.Router();
 
 router.use(requireAuth);
@@ -31,6 +31,31 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.post('/', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Project name required' });
+    const { data, error } = await supabase
+      .from('sections').insert({ name: name.trim() }).select().single();
+    if (error) throw error;
+    res.status(201).json({ ...data, total: 0, complete: 0, inProgress: 0, notStarted: 0, pct: 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    await supabase.from('files').delete().eq('section_id', req.params.id);
+    await supabase.from('deliverables').delete().eq('section_id', req.params.id);
+    const { error } = await supabase.from('sections').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id/deliverables', async (req, res) => {
   try {
     const { data: section, error: sErr } = await supabase
@@ -56,6 +81,38 @@ router.get('/:id/deliverables', async (req, res) => {
 
     const enriched = deliverables.map((d) => ({ ...d, fileCount: countMap[d.id] || 0 }));
     res.json({ section, deliverables: enriched });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/deliverables', requireAdmin, async (req, res) => {
+  try {
+    const { title, is_doc_type } = req.body;
+    if (!title || !title.trim()) return res.status(400).json({ error: 'Title required' });
+
+    const { data: existing } = await supabase
+      .from('deliverables')
+      .select('number')
+      .eq('section_id', req.params.id)
+      .eq('is_doc_type', false)
+      .order('number', { ascending: false })
+      .limit(1);
+
+    const nextNumber = (existing && existing[0]?.number != null) ? existing[0].number + 1 : 1;
+
+    const { data, error } = await supabase.from('deliverables').insert({
+      section_id: parseInt(req.params.id),
+      title: title.trim(),
+      status: 'No',
+      delivery_date: null,
+      comments: null,
+      is_doc_type: is_doc_type || false,
+      number: is_doc_type ? null : nextNumber,
+    }).select().single();
+    if (error) throw error;
+
+    res.status(201).json({ ...data, fileCount: 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

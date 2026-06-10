@@ -33,4 +33,15 @@ router.patch('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+router.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    await supabase.from('files').delete().eq('deliverable_id', req.params.id);
+    const { error } = await supabase.from('deliverables').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
