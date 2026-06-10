@@ -1,16 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const supabase = require('../db');
 const router = express.Router();
 
-function getUsers() {
-  return [
-    { username: 'admin', password: process.env.ADMIN_PASSWORD, role: 'admin' },
-    { username: 'rudy.choufani@skykapital.com', password: process.env.RUDY_PASSWORD, role: 'admin' },
-    { username: 'skykapital', password: process.env.SKYKAPITAL_PASSWORD, role: 'viewer' },
-    { username: 'hitech', password: process.env.HITECH_PASSWORD, role: 'viewer' },
-  ];
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'estr4ck3r_jwt_fallback_secret_2026';
 
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -18,16 +12,24 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
-  const users = getUsers();
-  const user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .ilike('username', username)
+    .single();
 
-  const match = password === user.password;
-  if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+  if (error || !user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
 
   const token = jwt.sign(
     { username: user.username, role: user.role },
-    process.env.JWT_SECRET,
+    JWT_SECRET,
     { expiresIn: '8h' }
   );
 
