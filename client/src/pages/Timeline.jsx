@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
 const STATUS_META = {
-  Yes:     { label: 'Complete',    bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
-  Ongoing: { label: 'In Progress', bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-300',   dot: 'bg-amber-400',   bar: 'bg-amber-400'  },
-  No:      { label: 'Not Started', bg: 'bg-gray-100',    text: 'text-gray-500',    border: 'border-gray-200',    dot: 'bg-gray-400',    bar: 'bg-gray-400'   },
+  Yes:     { label: 'Complete',    dot: 'bg-emerald-500', ring: 'ring-emerald-300', text: 'text-emerald-700', bg: 'bg-emerald-50',  tooltip: 'border-emerald-200' },
+  Ongoing: { label: 'In Progress', dot: 'bg-amber-400',   ring: 'ring-amber-300',   text: 'text-amber-700',   bg: 'bg-amber-50',    tooltip: 'border-amber-200'   },
+  No:      { label: 'Not Started', dot: 'bg-gray-400',    ring: 'ring-gray-200',    text: 'text-gray-500',    bg: 'bg-gray-50',     tooltip: 'border-gray-200'    },
+  overdue: { label: 'Overdue',     dot: 'bg-red-500',     ring: 'ring-red-300',     text: 'text-red-700',     bg: 'bg-red-50',      tooltip: 'border-red-200'     },
 };
 
-// Parse "dd/mm/yy" or "dd/mm/yyyy" → Date
 function parseDate(str) {
   if (!str) return null;
   const parts = str.trim().split('/');
@@ -19,65 +19,95 @@ function parseDate(str) {
   return isNaN(date.getTime()) ? null : date;
 }
 
-function formatMonth(date) {
-  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(date) {
+  return date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
 }
 
 function daysFromNow(date) {
-  const today = new Date(); today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   return Math.round((date - today) / 86400000);
 }
 
-function DueBadge({ date }) {
-  const days = daysFromNow(date);
-  if (days < 0) return <span className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">{Math.abs(days)}d overdue</span>;
-  if (days === 0) return <span className="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">Due today</span>;
-  if (days <= 7) return <span className="text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">Due in {days}d</span>;
-  return <span className="text-xs text-gray-400">{date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</span>;
+function getStatusKey(item) {
+  if (item.status !== 'Yes' && item._date && daysFromNow(item._date) < 0) return 'overdue';
+  return item.status;
 }
 
 export default function Timeline() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selectedProject, setSelectedProject] = useState('All');
+  const [tooltip, setTooltip] = useState(null); // { item, x, y }
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const containerRef = useRef(null);
 
   useEffect(() => {
     api.get('/sections/timeline/all')
       .then(res => setItems(res.data))
-      .catch(() => setError('Failed to load timeline'))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const projects = ['All', ...Array.from(new Set(items.map(i => i.section_name))).sort()];
+  const parsed = items
+    .map(i => ({ ...i, _date: parseDate(i.delivery_date) }))
+    .filter(i => i._date);
 
-  const filtered = items.filter(item => {
-    if (selectedProject !== 'All' && item.section_name !== selectedProject) return false;
-    if (selectedStatus !== 'All' && item.status !== selectedStatus) return false;
-    return true;
-  });
-
-  // Group by month
-  const parsed = filtered
-    .map(item => ({ ...item, _date: parseDate(item.delivery_date) }))
-    .filter(item => item._date)
-    .sort((a, b) => a._date - b._date);
-
-  const grouped = [];
-  const seen = {};
-  for (const item of parsed) {
-    const key = formatMonth(item._date);
-    if (!seen[key]) { seen[key] = true; grouped.push({ month: key, date: item._date, items: [] }); }
-    grouped[grouped.length - 1].items.push(item);
+  // Date range: from earliest to latest + 1 month padding
+  const allDates = parsed.map(i => i._date);
+  if (allDates.length === 0 && !loading) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <h2 className="text-2xl font-bold text-[#1a3c5e] mb-2">Timeline</h2>
+        <p className="text-gray-500 text-sm">No deliverables with deadlines found.</p>
+      </div>
+    );
   }
 
-  // Summary stats
-  const overdue = parsed.filter(i => i._date && daysFromNow(i._date) < 0 && i.status !== 'Yes').length;
-  const upcoming7 = parsed.filter(i => { const d = daysFromNow(i._date); return d >= 0 && d <= 7 && i.status !== 'Yes'; }).length;
-  const total = parsed.length;
-  const done = parsed.filter(i => i.status === 'Yes').length;
+  const minDate = allDates.length ? new Date(Math.min(...allDates)) : new Date();
+  const maxDate = allDates.length ? new Date(Math.max(...allDates)) : new Date();
+  minDate.setDate(1);
+  maxDate.setDate(1); maxDate.setMonth(maxDate.getMonth() + 2);
+
+  // Build array of months between min and max
+  const months = [];
+  const cursor = new Date(minDate);
+  while (cursor <= maxDate) {
+    months.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  // Group items by section
+  const sectionMap = {};
+  for (const item of parsed) {
+    if (!sectionMap[item.section_id]) {
+      sectionMap[item.section_id] = { id: item.section_id, name: item.section_name, items: [] };
+    }
+    sectionMap[item.section_id].items.push(item);
+  }
+  const sections = Object.values(sectionMap).sort((a, b) => a.id - b.id);
+
+  const MONTH_W = 120; // px per month column
+  const ROW_H = 56;    // px per project row
+  const LABEL_W = 120; // left label column
+
+  function dateToX(date) {
+    const totalMs = maxDate - minDate;
+    const offsetMs = date - minDate;
+    return (offsetMs / totalMs) * (months.length * MONTH_W);
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayX = dateToX(today);
+
+  // Filter items
+  const filterFn = (item) => {
+    if (selectedStatus === 'All') return true;
+    return getStatusKey(item) === selectedStatus;
+  };
 
   if (loading) {
     return (
@@ -87,155 +117,222 @@ export default function Timeline() {
     );
   }
 
+  // Stats
+  const totalItems = parsed.length;
+  const overdueItems = parsed.filter(i => getStatusKey(i) === 'overdue').length;
+  const completeItems = parsed.filter(i => i.status === 'Yes').length;
+  const thisWeek = parsed.filter(i => { const d = daysFromNow(i._date); return d >= 0 && d <= 7 && i.status !== 'Yes'; }).length;
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="mb-6">
+      <div className="max-w-5xl mx-auto mb-6">
         <h2 className="text-2xl font-bold text-[#1a3c5e]">Timeline</h2>
-        <p className="text-gray-500 text-sm mt-0.5">Deliverable deadlines across all projects</p>
+        <p className="text-gray-500 text-sm mt-0.5">Project deadlines plotted across time — hover dots for details</p>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-7">
+      {/* Stats */}
+      <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Total Deadlines', value: total,     color: 'text-[#1a3c5e]', bg: 'bg-blue-50',    border: 'border-blue-100' },
-          { label: 'Complete',        value: done,      color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-          { label: 'Due This Week',   value: upcoming7, color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-100' },
-          { label: 'Overdue',         value: overdue,   color: 'text-red-700',    bg: 'bg-red-50',     border: 'border-red-100' },
-        ].map(({ label, value, color, bg, border }) => (
-          <div key={label} className={`${bg} border ${border} rounded-2xl p-4 text-center`}>
-            <div className={`text-3xl font-black ${color}`}>{value}</div>
+          { label: 'Total',        value: totalItems,    color: 'text-[#1a3c5e]', bg: 'bg-blue-50 border-blue-100' },
+          { label: 'Complete',     value: completeItems, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+          { label: 'This Week',    value: thisWeek,      color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-100' },
+          { label: 'Overdue',      value: overdueItems,  color: 'text-red-700',    bg: 'bg-red-50 border-red-100' },
+        ].map(({ label, value, color, bg }) => (
+          <div key={label} className={`border rounded-xl p-3 text-center ${bg}`}>
+            <div className={`text-2xl font-black ${color}`}>{value}</div>
             <div className="text-xs text-gray-500 mt-0.5">{label}</div>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">Project</label>
-          <div className="flex flex-wrap gap-1.5">
-            {projects.map(p => (
-              <button
-                key={p}
-                onClick={() => setSelectedProject(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedProject === p
-                    ? 'bg-[#1a3c5e] text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1a3c5e] hover:text-[#1a3c5e]'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
+      {/* Status filter */}
+      <div className="max-w-5xl mx-auto flex flex-wrap gap-1.5 mb-6">
+        {[
+          { key: 'All',     label: 'All' },
+          { key: 'No',      label: 'Not Started' },
+          { key: 'Ongoing', label: 'In Progress' },
+          { key: 'Yes',     label: 'Complete' },
+          { key: 'overdue', label: 'Overdue' },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSelectedStatus(key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              selectedStatus === key
+                ? 'bg-[#1a3c5e] text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1a3c5e]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Gantt chart */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Month header row */}
+        <div className="flex border-b border-gray-100 bg-gray-50/80 sticky top-0 z-10">
+          <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="flex-shrink-0 px-4 py-3 border-r border-gray-100">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Project</span>
+          </div>
+          <div className="overflow-x-auto flex-1" id="header-scroll">
+            <div className="flex" style={{ width: months.length * MONTH_W }}>
+              {months.map((m, i) => {
+                const isNow = m.getMonth() === today.getMonth() && m.getFullYear() === today.getFullYear();
+                return (
+                  <div
+                    key={i}
+                    style={{ width: MONTH_W, minWidth: MONTH_W }}
+                    className={`px-2 py-3 border-r border-gray-100 text-xs font-semibold text-center ${
+                      isNow ? 'text-[#1a3c5e] bg-blue-50' : 'text-gray-400'
+                    }`}
+                  >
+                    {monthLabel(m)}
+                    {isNow && <div className="text-[10px] font-normal text-blue-400">today</div>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
-        <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">Status</label>
-          <div className="flex gap-1.5">
-            {['All', 'No', 'Ongoing', 'Yes'].map(s => (
-              <button
-                key={s}
-                onClick={() => setSelectedStatus(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedStatus === s
-                    ? 'bg-[#1a3c5e] text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1a3c5e] hover:text-[#1a3c5e]'
-                }`}
-              >
-                {s === 'All' ? 'All' : s === 'Yes' ? 'Complete' : s === 'Ongoing' ? 'In Progress' : 'Not Started'}
-              </button>
-            ))}
+
+        {/* Project rows */}
+        <div className="divide-y divide-gray-50">
+          {sections.map((section, si) => {
+            const visibleItems = section.items.filter(filterFn);
+            const rowBg = si % 2 === 0 ? 'bg-white' : 'bg-gray-50/40';
+
+            return (
+              <div key={section.id} className={`flex ${rowBg} hover:bg-blue-50/20 transition-colors`} style={{ minHeight: ROW_H }}>
+                {/* Project label */}
+                <div
+                  style={{ width: LABEL_W, minWidth: LABEL_W }}
+                  className="flex-shrink-0 px-4 py-3 border-r border-gray-100 flex items-center cursor-pointer group"
+                  onClick={() => navigate(`/sections/${section.id}`)}
+                >
+                  <div>
+                    <p className="text-sm font-bold text-[#1a3c5e] group-hover:underline leading-tight">{section.name}</p>
+                    <p className="text-[10px] text-gray-400">{section.items.length} items</p>
+                  </div>
+                </div>
+
+                {/* Timeline lane */}
+                <div className="flex-1 overflow-x-auto relative" style={{ minHeight: ROW_H }}>
+                  <div className="relative" style={{ width: months.length * MONTH_W, height: ROW_H }}>
+                    {/* Month grid lines */}
+                    {months.map((m, i) => (
+                      <div
+                        key={i}
+                        className="absolute top-0 bottom-0 border-r border-gray-100"
+                        style={{ left: (i + 1) * MONTH_W }}
+                      />
+                    ))}
+
+                    {/* Today line */}
+                    {todayX >= 0 && todayX <= months.length * MONTH_W && (
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 opacity-60"
+                        style={{ left: todayX }}
+                      />
+                    )}
+
+                    {/* Deliverable dots */}
+                    {section.items.map(item => {
+                      const x = dateToX(item._date);
+                      const sk = getStatusKey(item);
+                      const meta = STATUS_META[sk];
+                      const visible = filterFn(item);
+
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setTooltip(t => t?.item.id === item.id ? null : { item, x })}
+                          style={{ left: x, top: '50%', transform: 'translate(-50%, -50%)', opacity: visible ? 1 : 0.15 }}
+                          className={`absolute w-4 h-4 rounded-full ${meta.dot} ring-2 ${meta.ring} shadow-sm
+                            hover:scale-150 transition-transform z-20 focus:outline-none`}
+                          title={item.title}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex flex-wrap gap-4">
+          {Object.entries(STATUS_META).map(([key, meta]) => (
+            <div key={key} className="flex items-center gap-1.5">
+              <span className={`w-3 h-3 rounded-full ${meta.dot} ring-1 ${meta.ring}`} />
+              <span className="text-xs text-gray-500">{meta.label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <span className="w-0.5 h-3 bg-blue-400 inline-block" />
+            <span className="text-xs text-gray-500">Today</span>
           </div>
         </div>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-
-      {grouped.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <p className="text-sm">No deadlines found for this filter.</p>
-        </div>
-      )}
-
-      {/* Timeline groups */}
-      <div className="space-y-8">
-        {grouped.map(({ month, date, items: monthItems }) => {
-          const isPast = date < new Date() && date.getMonth() < new Date().getMonth() || date.getFullYear() < new Date().getFullYear();
-          const isCurrentMonth = date.getMonth() === new Date().getMonth() && date.getFullYear() === new Date().getFullYear();
-
-          return (
-            <div key={month}>
-              {/* Month header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
-                  isCurrentMonth
-                    ? 'bg-[#1a3c5e] text-white'
-                    : isPast
-                    ? 'bg-gray-100 text-gray-500'
-                    : 'bg-blue-50 text-[#1a3c5e]'
-                }`}>
-                  {month}
-                  {isCurrentMonth && <span className="ml-2 text-xs font-normal opacity-75">current</span>}
-                </div>
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-xs text-gray-400">{monthItems.length} deadline{monthItems.length !== 1 ? 's' : ''}</span>
-              </div>
-
-              {/* Items */}
-              <div className="space-y-2.5 pl-2">
-                {monthItems.map(item => {
-                  const meta = STATUS_META[item.status] || STATUS_META.No;
-                  const days = daysFromNow(item._date);
-                  const isOverdue = days < 0 && item.status !== 'Yes';
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => navigate(`/sections/${item.section_id}`)}
-                      className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md group ${
-                        isOverdue
-                          ? 'bg-red-50 border-red-200 hover:border-red-400'
-                          : `bg-white ${meta.border} border hover:border-[#1a3c5e]`
-                      }`}
-                    >
-                      {/* Left accent bar */}
-                      <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${isOverdue ? 'bg-red-400' : meta.bar}`} />
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 group-hover:text-[#1a3c5e] transition-colors truncate">{item.title}</p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-xs font-medium text-[#1a3c5e] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                {item.section_name}
-                              </span>
-                              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${meta.bg} ${meta.text}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-                                {meta.label}
-                              </span>
-                            </div>
-                            {item.comments && (
-                              <p className="text-xs text-gray-400 mt-1.5 line-clamp-1">{item.comments}</p>
-                            )}
-                          </div>
-                          <div className="flex-shrink-0 text-right">
-                            <DueBadge date={item._date} />
-                          </div>
-                        </div>
+      {/* Tooltip / detail panel */}
+      {tooltip && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setTooltip(null)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            {(() => {
+              const item = tooltip.item;
+              const sk = getStatusKey(item);
+              const meta = STATUS_META[sk];
+              const days = daysFromNow(item._date);
+              return (
+                <>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-3 h-3 rounded-full ${meta.dot} flex-shrink-0 mt-0.5`} />
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.text}`}>{meta.label}</span>
+                    </div>
+                    <button onClick={() => setTooltip(null)} className="text-gray-400 hover:text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <h4 className="text-base font-bold text-gray-900 mb-1">{item.title}</h4>
+                  <p className="text-xs text-[#1a3c5e] font-semibold mb-3">{item.section_name}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <div className="text-gray-400 mb-0.5">Due date</div>
+                      <div className="font-semibold text-gray-700">{item.delivery_date}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <div className="text-gray-400 mb-0.5">Days remaining</div>
+                      <div className={`font-semibold ${days < 0 ? 'text-red-600' : days <= 7 ? 'text-amber-600' : 'text-gray-700'}`}>
+                        {days < 0 ? `${Math.abs(days)} overdue` : days === 0 ? 'Today' : `${days} days`}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  </div>
+                  {item.comments && (
+                    <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2.5 mb-3">
+                      {item.comments}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { setTooltip(null); navigate(`/sections/${item.section_id}`); }}
+                    className="w-full py-2 bg-[#1a3c5e] text-white text-sm font-medium rounded-lg hover:bg-[#122d47] transition-colors"
+                  >
+                    Open Project
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
