@@ -86,6 +86,29 @@ router.get('/:id/deliverables', async (req, res) => {
   }
 });
 
+router.get('/timeline/all', async (req, res) => {
+  try {
+    const { data: sections, error: sErr } = await supabase.from('sections').select('id, name');
+    if (sErr) throw sErr;
+
+    const { data: deliverables, error: dErr } = await supabase
+      .from('deliverables')
+      .select('id, section_id, title, status, delivery_date, comments, number')
+      .eq('is_doc_type', false)
+      .not('delivery_date', 'is', null);
+    if (dErr) throw dErr;
+
+    const sectionMap = Object.fromEntries(sections.map(s => [s.id, s.name]));
+    const result = deliverables
+      .map(d => ({ ...d, section_name: sectionMap[d.section_id] || '' }))
+      .filter(d => d.delivery_date && d.delivery_date.trim());
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/deliverables', requireAdmin, async (req, res) => {
   try {
     const { title, is_doc_type } = req.body;

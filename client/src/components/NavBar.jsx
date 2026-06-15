@@ -45,6 +45,7 @@ export default function NavBar({ user, onLogout }) {
             </Link>
             <div className="hidden sm:flex items-center gap-1">
               {navLink('/', 'Dashboard')}
+              {navLink('/timeline', 'Timeline')}
               {navLink('/data-room', 'Data Room')}
             </div>
           </div>

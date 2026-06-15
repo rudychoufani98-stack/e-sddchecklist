@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SectionDetail from './pages/SectionDetail';
 import DataRoom from './pages/DataRoom';
+import Timeline from './pages/Timeline';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -16,13 +17,8 @@ export default function App() {
     }
   });
 
-  function handleLogin(userData) {
-    setUser(userData);
-  }
-
-  function handleLogout() {
-    setUser(null);
-  }
+  function handleLogin(userData) { setUser(userData); }
+  function handleLogout() { setUser(null); }
 
   if (!user) {
     return (
@@ -43,6 +39,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/sections/:id" element={<SectionDetail user={user} />} />
             <Route path="/data-room" element={<DataRoom user={user} />} />
+            <Route path="/timeline" element={<Timeline />} />
             <Route path="/login" element={<Navigate to="/" />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
