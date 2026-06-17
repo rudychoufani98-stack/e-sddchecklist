@@ -41,4 +41,25 @@ router.post('/:id/sub-sections', requireAdmin, async (req, res) => {
   }
 });
 
+router.delete('/:id', requireAdmin, async (req, res) => {
+  try {
+    await supabase.from('grv_sub_sections').delete().eq('project_id', req.params.id);
+    const { error } = await supabase.from('grv_projects').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id/sub-sections/:subId', requireAdmin, async (req, res) => {
+  try {
+    const { error } = await supabase.from('grv_sub_sections').delete().eq('id', req.params.subId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

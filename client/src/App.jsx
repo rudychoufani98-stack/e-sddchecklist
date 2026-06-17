@@ -7,6 +7,7 @@ import DataRoom from './pages/DataRoom';
 import Timeline from './pages/Timeline';
 import ExternalGrievances from './pages/grv/ExternalGrievances';
 import SubmitGrievance from './pages/grv/SubmitGrievance';
+import GrvSettings from './pages/grv/GrvSettings';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/timeline"        element={<Timeline />} />
             <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
             <Route path="/grv/submit"      element={<SubmitGrievance />} />
+            <Route path="/grv/settings"    element={<GrvSettings user={user} />} />
             <Route path="/login"           element={<Navigate to="/" />} />
             <Route path="*"               element={<Navigate to="/" />} />
           </Routes>

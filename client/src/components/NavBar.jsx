@@ -106,6 +106,7 @@ export default function NavBar({ user, onLogout }) {
                 items={[
                   { path: '/grv/grievances', label: 'External Grievances' },
                   { path: '/grv/submit',     label: 'Submit Grievance' },
+                  { path: '/grv/settings',   label: 'Project Settings' },
                 ]}
               />
             </div>
