@@ -39,15 +39,24 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            <Route path="/"                element={<Dashboard />} />
-            <Route path="/sections/:id"    element={<SectionDetail user={user} />} />
-            <Route path="/data-room"       element={<DataRoom user={user} />} />
-            <Route path="/timeline"        element={<Timeline />} />
-            <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
-            <Route path="/grv/submit"      element={<SubmitGrievance />} />
-            <Route path="/grv/settings"    element={<GrvSettings user={user} />} />
-            <Route path="/login"           element={<Navigate to="/" />} />
-            <Route path="*"               element={<Navigate to="/" />} />
+            {user.role === 'submitter' ? (
+              <>
+                <Route path="/grv/submit" element={<SubmitGrievance />} />
+                <Route path="*"           element={<Navigate to="/grv/submit" />} />
+              </>
+            ) : (
+              <>
+                <Route path="/"                element={<Dashboard />} />
+                <Route path="/sections/:id"    element={<SectionDetail user={user} />} />
+                <Route path="/data-room"       element={<DataRoom user={user} />} />
+                <Route path="/timeline"        element={<Timeline />} />
+                <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
+                <Route path="/grv/submit"      element={<SubmitGrievance />} />
+                <Route path="/grv/settings"    element={<GrvSettings user={user} />} />
+                <Route path="/login"           element={<Navigate to="/" />} />
+                <Route path="*"               element={<Navigate to="/" />} />
+              </>
+            )}
           </Routes>
         </main>
       </div>

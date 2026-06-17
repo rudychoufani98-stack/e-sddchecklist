@@ -96,19 +96,22 @@ export default function NavBar({ user, onLogout }) {
             </Link>
 
             <div className="hidden sm:flex items-center gap-1">
-              {navLink('/', 'Dashboard')}
-              {navLink('/timeline', 'Timeline')}
-              {navLink('/data-room', 'Data Room')}
+              {user?.role !== 'submitter' && navLink('/', 'Dashboard')}
+              {user?.role !== 'submitter' && navLink('/timeline', 'Timeline')}
+              {user?.role !== 'submitter' && navLink('/data-room', 'Data Room')}
 
-              {/* ESG Data Collection dropdown */}
-              <DropdownMenu
-                label="ESG Data Collection"
-                items={[
-                  { path: '/grv/grievances', label: 'External Grievances' },
-                  { path: '/grv/submit',     label: 'Submit Grievance' },
-                  { path: '/grv/settings',   label: 'Project Settings' },
-                ]}
-              />
+              {user?.role === 'submitter' ? (
+                navLink('/grv/submit', 'Submit Grievance')
+              ) : (
+                <DropdownMenu
+                  label="ESG Data Collection"
+                  items={[
+                    { path: '/grv/grievances', label: 'External Grievances' },
+                    { path: '/grv/submit',     label: 'Submit Grievance' },
+                    { path: '/grv/settings',   label: 'Project Settings' },
+                  ]}
+                />
+              )}
             </div>
           </div>
 
@@ -120,8 +123,8 @@ export default function NavBar({ user, onLogout }) {
               </div>
               <div className="text-right">
                 <div className="text-white text-xs font-semibold leading-tight truncate max-w-[160px]">{user?.username}</div>
-                <div className="text-blue-300 text-[10px] leading-tight">
-                  {user?.role === 'admin' ? 'Administrator' : 'Viewer'}
+                <div className="text-blue-300 text-[10px] leading-tight capitalize">
+                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'submitter' ? 'Grievance Submitter' : 'Viewer'}
                 </div>
               </div>
             </div>
