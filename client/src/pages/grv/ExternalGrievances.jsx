@@ -323,25 +323,23 @@ export default function ExternalGrievances({ user }) {
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
-                      {['Ref','Date','Project','Sub-section','Community','Nature','Risk','Status','Escalation','Actions'].map(h => (
+                      {['Ref','Date','Project','Community','Nature','Risk','Status','Actions'].map(h => (
                         <th key={h} className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {loading && <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400 text-sm">Loading...</td></tr>}
-                    {!loading && displayed.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400 text-sm">No grievances found.</td></tr>}
+                    {loading && <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">Loading...</td></tr>}
+                    {!loading && displayed.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">No grievances found.</td></tr>}
                     {displayed.map(g => (
                       <tr key={g.id} className="hover:bg-amber-50/20 transition-colors group">
                         <td className="px-4 py-3 font-mono text-xs font-bold text-[#1a3c5e] whitespace-nowrap">{g.reference_no}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{g.date_of_receipt || '—'}</td>
                         <td className="px-4 py-3 text-xs font-medium text-gray-700 whitespace-nowrap">{g.project_name || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{g.sub_section_name || '—'}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{g.community_name || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate">{g.nature_of_grievance?.replace(/_/g,' ') || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">{g.nature_of_grievance?.replace(/_/g,' ') || '—'}</td>
                         <td className="px-4 py-3 whitespace-nowrap"><Badge type="risk" value={g.risk_significance} /></td>
                         <td className="px-4 py-3 whitespace-nowrap"><Badge type="status" value={g.status} /></td>
-                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{ESCALATION_LABELS[g.escalation_level] || '—'}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex gap-1.5">
                             <button onClick={() => setSelected(g)}
@@ -361,7 +359,7 @@ export default function ExternalGrievances({ user }) {
                                   {closingId === g.id ? '...' : g.status === 'open' ? 'Close' : 'Reopen'}
                                 </button>
                                 <button onClick={() => handleDelete(g.id)}
-                                  className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100">
+                                  className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
                                   Del
                                 </button>
                               </>
