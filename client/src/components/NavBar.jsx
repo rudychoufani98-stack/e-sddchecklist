@@ -91,7 +91,7 @@ export default function NavBar({ user, onLogout }) {
               </div>
               <div>
                 <div className="text-white font-bold text-sm leading-tight">E&amp;S Due Diligence</div>
-                <div className="text-blue-300 text-[10px] leading-tight">LCCH Tracker</div>
+                <div className="text-blue-300 text-[10px] leading-tight">ESG Tracker</div>
               </div>
             </Link>
 
