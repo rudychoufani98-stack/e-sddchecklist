@@ -41,8 +41,9 @@ export default function App() {
           <Routes>
             {user.role === 'submitter' ? (
               <>
-                <Route path="/grv/submit" element={<SubmitGrievance />} />
-                <Route path="*"           element={<Navigate to="/grv/submit" />} />
+                <Route path="/grv/submit"     element={<SubmitGrievance />} />
+                <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
+                <Route path="*"               element={<Navigate to="/grv/grievances" />} />
               </>
             ) : (
               <>

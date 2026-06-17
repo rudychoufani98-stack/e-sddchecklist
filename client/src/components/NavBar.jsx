@@ -101,7 +101,10 @@ export default function NavBar({ user, onLogout }) {
               {user?.role !== 'submitter' && navLink('/data-room', 'Data Room')}
 
               {user?.role === 'submitter' ? (
-                navLink('/grv/submit', 'Submit Grievance')
+                <>
+                  {navLink('/grv/grievances', 'Grievances')}
+                  {navLink('/grv/submit', 'Submit Grievance')}
+                </>
               ) : (
                 <DropdownMenu
                   label="ESG Data Collection"
