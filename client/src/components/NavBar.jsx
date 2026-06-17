@@ -1,10 +1,61 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+
+function DropdownMenu({ label, items, basePath }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const location = useLocation();
+
+  const isActive = items.some(i => location.pathname.startsWith(i.path));
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+          isActive ? 'bg-white/20 text-white' : 'text-blue-100 hover:bg-white/10 hover:text-white'
+        }`}
+      >
+        {label}
+        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 bg-white rounded-xl shadow-xl border border-gray-100 z-50 min-w-[200px] py-1.5 overflow-hidden">
+          <div className="px-3 py-1.5 border-b border-gray-100 mb-1">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</p>
+          </div>
+          {items.map(item => (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => setOpen(false)}
+              className={`flex items-center gap-2.5 px-3 py-2 text-sm transition-colors ${
+                location.pathname === item.path
+                  ? 'bg-blue-50 text-[#1a3c5e] font-semibold'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-[#1a3c5e]'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${location.pathname === item.path ? 'bg-[#1a3c5e]' : 'bg-gray-300'}`} />
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function NavBar({ user, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   function handleLogout() {
     localStorage.removeItem('token');
@@ -31,10 +82,10 @@ export default function NavBar({ user, onLogout }) {
   return (
     <nav className="bg-[#1a3c5e] shadow-lg sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-15 py-3">
-          {/* Logo + nav links */}
+        <div className="flex items-center justify-between py-3">
+          {/* Logo + nav */}
           <div className="flex items-center gap-5">
-            <Link to="/" className="flex items-center gap-2.5">
+            <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
                 <span className="text-[#1a3c5e] font-black text-xs tracking-tight">ES</span>
               </div>
@@ -43,14 +94,24 @@ export default function NavBar({ user, onLogout }) {
                 <div className="text-blue-300 text-[10px] leading-tight">LCCH Tracker</div>
               </div>
             </Link>
+
             <div className="hidden sm:flex items-center gap-1">
               {navLink('/', 'Dashboard')}
               {navLink('/timeline', 'Timeline')}
               {navLink('/data-room', 'Data Room')}
+
+              {/* ESG Data Collection dropdown */}
+              <DropdownMenu
+                label="ESG Data Collection"
+                items={[
+                  { path: '/grv/grievances', label: 'External Grievances' },
+                  { path: '/grv/submit',     label: 'Submit Grievance' },
+                ]}
+              />
             </div>
           </div>
 
-          {/* User info + logout */}
+          {/* User + logout */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SectionDetail from './pages/SectionDetail';
 import DataRoom from './pages/DataRoom';
 import Timeline from './pages/Timeline';
+import ExternalGrievances from './pages/grv/ExternalGrievances';
+import SubmitGrievance from './pages/grv/SubmitGrievance';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -36,12 +38,14 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/sections/:id" element={<SectionDetail user={user} />} />
-            <Route path="/data-room" element={<DataRoom user={user} />} />
-            <Route path="/timeline" element={<Timeline />} />
-            <Route path="/login" element={<Navigate to="/" />} />
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="/"                element={<Dashboard />} />
+            <Route path="/sections/:id"    element={<SectionDetail user={user} />} />
+            <Route path="/data-room"       element={<DataRoom user={user} />} />
+            <Route path="/timeline"        element={<Timeline />} />
+            <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
+            <Route path="/grv/submit"      element={<SubmitGrievance />} />
+            <Route path="/login"           element={<Navigate to="/" />} />
+            <Route path="*"               element={<Navigate to="/" />} />
           </Routes>
         </main>
       </div>

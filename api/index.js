@@ -13,6 +13,8 @@ app.use('/api/auth', require('../server/routes/auth'));
 app.use('/api/sections', require('../server/routes/sections'));
 app.use('/api/deliverables', require('../server/routes/deliverables'));
 app.use('/api/files', require('../server/routes/files'));
+app.use('/api/grievances', require('../server/routes/grievances'));
+app.use('/api/grv-projects', require('../server/routes/grv-projects'));
 
 // Serve React build (static files + SPA fallback)
 const buildDir = path.join(__dirname, '../client/build');
