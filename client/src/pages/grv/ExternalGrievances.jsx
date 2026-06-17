@@ -161,12 +161,16 @@ export default function ExternalGrievances({ user }) {
           <div className="flex flex-wrap items-center gap-4">
             {/* Logo + title */}
             <div className="flex items-center gap-3 mr-4">
-              <div className="w-14 h-14 bg-[#1a3c5e] rounded-xl flex items-center justify-center flex-shrink-0">
-                <div className="text-center">
-                  <div className="text-yellow-400 font-black text-xs leading-none">HITECH</div>
-                  <div className="text-white font-black text-lg leading-none">H</div>
-                </div>
-              </div>
+              <svg width="56" height="56" viewBox="0 0 56 56" className="flex-shrink-0 rounded-lg" xmlns="http://www.w3.org/2000/svg">
+                {/* Yellow background */}
+                <rect width="56" height="56" fill="#FFD700"/>
+                {/* Red border */}
+                <rect x="2" y="2" width="52" height="52" fill="none" stroke="#CC0000" strokeWidth="4"/>
+                {/* HITECH text */}
+                <text x="28" y="14" textAnchor="middle" fill="#CC0000" fontFamily="Arial Black, sans-serif" fontWeight="900" fontSize="9" letterSpacing="0.5">HITECH</text>
+                {/* Big H */}
+                <text x="28" y="46" textAnchor="middle" fill="#CC0000" fontFamily="Arial Black, sans-serif" fontWeight="900" fontSize="34">H</text>
+              </svg>
               <div>
                 <h1 className="text-xl font-black text-[#1a3c5e]">Grievance Tracker</h1>
                 <p className="text-xs text-gray-400">All Projects — 2025 &amp; 2026</p>
