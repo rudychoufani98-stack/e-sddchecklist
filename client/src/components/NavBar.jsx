@@ -18,8 +18,8 @@ function DropdownMenu({ label, items, basePath }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-          isActive ? 'bg-white/20 text-white' : 'text-blue-100 hover:bg-white/10 hover:text-white'
+        className={`flex items-center gap-1 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+          isActive ? 'bg-white/15 text-white shadow-inner ring-1 ring-white/10' : 'text-blue-100/90 hover:bg-white/10 hover:text-white'
         }`}
       >
         {label}
@@ -67,10 +67,10 @@ export default function NavBar({ user, onLogout }) {
   const navLink = (path, label) => (
     <Link
       to={path}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+      className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
         location.pathname === path
-          ? 'bg-white/20 text-white'
-          : 'text-blue-100 hover:bg-white/10 hover:text-white'
+          ? 'bg-white/15 text-white shadow-inner ring-1 ring-white/10'
+          : 'text-blue-100/90 hover:bg-white/10 hover:text-white'
       }`}
     >
       {label}
@@ -80,20 +80,22 @@ export default function NavBar({ user, onLogout }) {
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
 
   return (
-    <nav className="bg-[#1a3c5e] shadow-lg sticky top-0 z-40">
+    <nav className="bg-gradient-to-r from-[#15304c] via-[#1a3c5e] to-[#15304c] shadow-lg sticky top-0 z-40 border-b-2 border-[#FFD700]/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-3">
           {/* Logo + nav */}
-          <div className="flex items-center gap-5">
-            <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-md ring-1 ring-[#FFD700]/40 group-hover:ring-[#FFD700] transition-all">
                 <span className="text-[#1a3c5e] font-black text-xs tracking-tight">ES</span>
               </div>
               <div>
                 <div className="text-white font-bold text-sm leading-tight">E&amp;S Due Diligence</div>
-                <div className="text-blue-300 text-[10px] leading-tight">ESG Tracker</div>
+                <div className="text-blue-300/90 text-[10px] leading-tight tracking-wide">ESG Tracker</div>
               </div>
             </Link>
+
+            <div className="hidden sm:block w-px h-8 bg-white/15" />
 
             <div className="hidden sm:flex items-center gap-1">
               {user?.role === 'submitter' ? (
@@ -129,19 +131,19 @@ export default function NavBar({ user, onLogout }) {
           {/* User + logout */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{initials}</span>
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FFD700] to-[#e6b800] flex items-center justify-center shadow-sm ring-1 ring-white/20">
+                <span className="text-[#1a3c5e] text-xs font-black">{initials}</span>
               </div>
               <div className="text-right">
                 <div className="text-white text-xs font-semibold leading-tight truncate max-w-[160px]">{user?.username}</div>
-                <div className="text-blue-300 text-[10px] leading-tight capitalize">
+                <div className="text-blue-300/90 text-[10px] leading-tight capitalize">
                   {user?.role === 'admin' ? 'Administrator' : user?.role === 'submitter' ? 'Grievance Submitter' : 'Viewer'}
                 </div>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-lg transition-colors border border-white/10"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-lg transition-all duration-150 border border-white/10 hover:border-white/20"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
