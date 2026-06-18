@@ -96,25 +96,31 @@ export default function NavBar({ user, onLogout }) {
             </Link>
 
             <div className="hidden sm:flex items-center gap-1">
-              {user?.role !== 'submitter' && navLink('/', 'Dashboard')}
-              {user?.role !== 'submitter' && navLink('/timeline', 'Timeline')}
-              {user?.role !== 'submitter' && navLink('/data-room', 'Data Room')}
-              {user?.role === 'admin' && navLink('/construction', 'Construction')}
-
               {user?.role === 'submitter' ? (
                 <>
                   {navLink('/grv/grievances', 'Grievances')}
                   {navLink('/grv/submit', 'Submit Grievance')}
                 </>
               ) : (
-                <DropdownMenu
-                  label="ESG Data Collection"
-                  items={[
-                    { path: '/grv/grievances', label: 'External Grievances' },
-                    { path: '/grv/submit',     label: 'Submit Grievance' },
-                    { path: '/grv/settings',   label: 'Project Settings' },
-                  ]}
-                />
+                <>
+                  <DropdownMenu
+                    label="ESG Tracker"
+                    items={[
+                      { path: '/',          label: 'Dashboard' },
+                      { path: '/timeline',  label: 'Timeline' },
+                      { path: '/data-room', label: 'Data Room' },
+                    ]}
+                  />
+                  <DropdownMenu
+                    label="ESG Data Collection"
+                    items={[
+                      { path: '/grv/grievances', label: 'External Grievances' },
+                      { path: '/grv/submit',     label: 'Submit Grievance' },
+                      { path: '/grv/settings',   label: 'Project Settings' },
+                    ]}
+                  />
+                  {user?.role === 'admin' && navLink('/construction', 'Construction Progress')}
+                </>
               )}
             </div>
           </div>
