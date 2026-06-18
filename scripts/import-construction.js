@@ -55,8 +55,9 @@ const FILES = [
   },
   {
     path: 'C:\\Users\\roudy\\Desktop\\LCCH SEC 2 Section_JUNE 2026.xlsx',
-    sheet: null, // use PBI sheet fallback
+    sheet: null, // SEC 2 only — use special handler
     period: '2026-06-01',
+    sec2Only: true,
   },
 ];
 
@@ -64,27 +65,27 @@ async function parseFile({ path, sheet, period }) {
   const wb = XLSX.readFile(path);
   const records = [];
 
-  // For June file, use PBI sheet since it only has Sec 2 data
+  // June file: only Section 2 data in overview sheet
   if (!sheet) {
-    const pbiSheet = wb.SheetNames.find(s => s.startsWith('PBI'));
-    if (!pbiSheet) return [];
-    const ws = wb.Sheets[pbiSheet];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-    for (const r of rows) {
-      const pct = r['Pct_Progress'];
-      if (pct === '' || pct === null || pct === undefined) continue;
-      const sub = String(r['Sub_Section'] || '').replace(/"/g,'').trim();
+    const ovSheet = wb.SheetNames[0]; // 'LCCH Overall progress - June 26'
+    const ws = wb.Sheets[ovSheet];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    // Rows 9-18: [#, Component, Key Activities, SEC2_pct]
+    const dataRows = rows.slice(9, 19).filter(r => r[1] && typeof r[3] === 'number');
+    for (const row of dataRows) {
+      const pct = parseFloat(row[3]);
+      if (isNaN(pct)) continue;
       records.push({
         reporting_period: period,
         project: 'LCCH',
-        section: subToSection(sub),
-        sub_section: sub,
-        component: String(r['Component'] || '').trim(),
-        key_activities: String(r['Key_Activities'] || '').trim(),
-        pct_progress: parseFloat(pct) || 0,
-        remarks: String(r['Remarks'] || '').trim() || null,
+        section: 'SECTION 2',
+        sub_section: '2',
+        component: String(row[1]).trim(),
+        key_activities: String(row[2]).trim(),
+        pct_progress: pct,
+        remarks: null,
         prepared_by: 'import',
-        status: parseFloat(pct) >= 100 ? 'Completed' : parseFloat(pct) > 0 ? 'In Progress' : 'Not Started',
+        status: pct >= 100 ? 'Completed' : pct > 0 ? 'In Progress' : 'Not Started',
       });
     }
     return records;

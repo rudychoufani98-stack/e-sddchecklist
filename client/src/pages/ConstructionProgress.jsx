@@ -1,379 +1,575 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
-const STATUS_META = {
-  'Completed':   { bg: 'bg-green-100',  text: 'text-green-700',  dot: 'bg-green-500'  },
-  'In Progress': { bg: 'bg-blue-100',   text: 'text-blue-700',   dot: 'bg-blue-500'   },
-  'Not Started': { bg: 'bg-gray-100',   text: 'text-gray-500',   dot: 'bg-gray-400'   },
-  'Delayed':     { bg: 'bg-red-100',    text: 'text-red-700',    dot: 'bg-red-500'    },
-  'On Hold':     { bg: 'bg-amber-100',  text: 'text-amber-700',  dot: 'bg-amber-500'  },
-};
+const COMPONENTS = [
+  { name: 'Earthworks',                               key: 'Fill placement, shaping, grading, compaction' },
+  { name: 'Pavement Formation',                       key: 'Stone base placement and trimming' },
+  { name: 'Ground and pavement layer stabilization',  key: 'Treatment/improvement of subgrade and designated layers' },
+  { name: 'Stormwater drainage works',                key: 'Installation of stormwater conveyance and associated drainage elements' },
+  { name: 'Rigid pavement works',                     key: 'CRCP - continuously reinforced concrete pavement - preparation and placement' },
+  { name: 'Structural and slope support works',       key: 'Retaining wall construction at required locations; road edge and finishing works' },
+  { name: 'Kerb installation',                        key: 'Supply and installation of kerb units along road edges and medians' },
+  { name: 'Road safety works',                        key: 'NJB - New Jersey barrier installation' },
+  { name: 'Pedestrian works',                         key: 'Walkway construction' },
+  { name: 'Solar Panels',                             key: 'Solar panel installation, mounting structures and grid connection' },
+];
 
-function pctColor(v) {
-  if (v >= 80) return 'bg-green-500';
-  if (v >= 50) return 'bg-blue-500';
-  if (v >= 25) return 'bg-amber-400';
+const COLORS = ['#1a3c5e','#e63946','#2a9d8f','#e9c46a','#f4a261','#264653','#8338ec','#3a86ff','#fb5607','#06d6a0'];
+
+function pctBg(v) {
+  if (v === null || v === undefined || v === '') return 'bg-gray-100 text-gray-400';
+  const n = Number(v);
+  if (n >= 100) return 'bg-green-100 text-green-800';
+  if (n >= 75)  return 'bg-emerald-100 text-emerald-700';
+  if (n >= 50)  return 'bg-blue-100 text-blue-700';
+  if (n >= 25)  return 'bg-amber-100 text-amber-700';
+  return 'bg-red-100 text-red-700';
+}
+function pctBar(v) {
+  const n = Number(v) || 0;
+  if (n >= 100) return 'bg-green-500';
+  if (n >= 75)  return 'bg-emerald-500';
+  if (n >= 50)  return 'bg-blue-500';
+  if (n >= 25)  return 'bg-amber-400';
   return 'bg-red-400';
 }
 
-function ProgressBar({ value }) {
-  const pct = Math.min(100, Math.max(0, value || 0));
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${pctColor(pct)}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs font-bold text-gray-700 w-10 text-right">{pct}%</span>
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const m = STATUS_META[status] || STATUS_META['Not Started'];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${m.bg} ${m.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`} />
-      {status || 'Not Started'}
-    </span>
-  );
+function fmtPeriod(p) {
+  if (!p) return '—';
+  const d = new Date(p);
+  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
 export default function ConstructionProgress() {
-  const [rows, setRows]           = useState([]);
+  const [tab, setTab]             = useState('dashboard');
+  const [allData, setAllData]     = useState([]);
   const [periods, setPeriods]     = useState([]);
+  const [structure, setStructure] = useState({ projects: [], sections: [], subSections: [], components: [], componentMap: {} });
   const [loading, setLoading]     = useState(true);
-  const [filters, setFilters]     = useState({ project: '', section: '', reporting_period: '' });
-  const [editing, setEditing]     = useState(null); // { id, pct_progress, status, remarks }
-  const [saving, setSaving]       = useState(false);
-  const [view, setView]           = useState('table'); // 'table' | 'grid' | 'trend' | 'trend'
-  const [allRows, setAllRows]     = useState([]); // unfiltered, for trend
 
-  const load = useCallback(async () => {
+  // Dashboard filters
+  const [selPeriod,  setSelPeriod]  = useState('');
+  const [selProject, setSelProject] = useState('');
+  const [selSection, setSelSection] = useState('');
+
+  // Enter Progress state
+  const [epPeriod,   setEpPeriod]   = useState('');
+  const [epProject,  setEpProject]  = useState('LCCH');
+  const [epGrid,     setEpGrid]     = useState({}); // key: `${sub}||${comp}` → {pct, remarks}
+  const [epSaving,   setEpSaving]   = useState(false);
+  const [epMsg,      setEpMsg]      = useState('');
+
+  // Settings state
+  const [newProject,    setNewProject]    = useState('');
+  const [newSection,    setNewSection]    = useState('');
+  const [newSubSection, setNewSubSection] = useState('');
+  const [settingMsg,    setSettingMsg]    = useState('');
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filters.project)          params.set('project', filters.project);
-      if (filters.section)          params.set('section', filters.section);
-      if (filters.reporting_period) params.set('reporting_period', filters.reporting_period);
-      const [rRows, rPeriods, rAll] = await Promise.all([
-        api.get(`/construction?${params}`),
-        api.get('/construction/periods'),
+      const [rAll, rPeriods, rStruct] = await Promise.all([
         api.get('/construction'),
+        api.get('/construction/periods'),
+        api.get('/construction/structure'),
       ]);
-      setRows(rRows.data);
+      setAllData(rAll.data);
       setPeriods(rPeriods.data);
-      setAllRows(rAll.data);
+      setStructure(rStruct.data);
+      if (!selPeriod && rPeriods.data.length) setSelPeriod(rPeriods.data[0]);
     } catch {}
     setLoading(false);
-  }, [filters]);
+  }, []); // eslint-disable-line
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
-  const projects  = [...new Set(rows.map(r => r.project))].filter(Boolean).sort();
-  const sections  = [...new Set(rows.map(r => r.section))].filter(Boolean).sort();
-  const components = [...new Set(rows.map(r => r.component))].filter(Boolean);
+  // Pre-fill Enter Progress grid with latest data
+  useEffect(() => {
+    if (!epPeriod || !allData.length) return;
+    const grid = {};
+    allData.filter(r => r.reporting_period === epPeriod && r.project === epProject).forEach(r => {
+      grid[`${r.sub_section}||${r.component}`] = { pct: r.pct_progress ?? '', remarks: r.remarks || '' };
+    });
+    setEpGrid(grid);
+  }, [epPeriod, epProject, allData]);
 
-  // Overall progress per section
-  const sectionSummary = sections.map(sec => {
-    const secRows = rows.filter(r => r.section === sec && r.pct_progress !== null);
-    const avg = secRows.length ? secRows.reduce((s, r) => s + Number(r.pct_progress), 0) / secRows.length : 0;
-    return { section: sec, avg: Math.round(avg), count: secRows.length };
+  // Derived data for dashboard
+  const dashData = allData.filter(r =>
+    (!selPeriod  || r.reporting_period === selPeriod) &&
+    (!selProject || r.project === selProject) &&
+    (!selSection || r.section === selSection)
+  );
+
+  const dashSections   = [...new Set(dashData.map(r => r.section))].filter(Boolean).sort();
+  const dashSubSections = [...new Set(dashData.map(r => r.sub_section))].filter(Boolean).sort((a,b)=>{
+    const order = ['1A','1B','1C','2','3A','3B','4A','4B','5','6','7','8','9'];
+    return order.indexOf(a) - order.indexOf(b);
   });
+  const dashComponents = COMPONENTS.map(c => c.name).filter(n => dashData.some(r => r.component === n));
 
-  const overallAvg = rows.length
-    ? Math.round(rows.filter(r => r.pct_progress !== null).reduce((s, r) => s + Number(r.pct_progress), 0) / rows.filter(r => r.pct_progress !== null).length)
-    : 0;
-
-  async function saveEdit() {
-    if (!editing) return;
-    setSaving(true);
-    try {
-      await api.patch(`/construction/${editing.id}`, {
-        pct_progress: editing.pct_progress,
-        status: editing.status,
-        remarks: editing.remarks,
-      });
-      setEditing(null);
-      load();
-    } catch {}
-    setSaving(false);
+  function getCell(comp, sub) {
+    return dashData.find(r => r.component === comp && r.sub_section === sub);
   }
 
-  // Grid view: components as rows, sections as columns
-  const gridData = components.map(comp => ({
-    component: comp,
-    key_activities: rows.find(r => r.component === comp)?.key_activities || '',
-    cells: sections.reduce((acc, sec) => {
-      const row = rows.find(r => r.component === comp && r.section === sec);
-      acc[sec] = row || null;
-      return acc;
-    }, {}),
-  }));
+  // Trend data — avg per component per period
+  const trendPeriods = [...periods].sort();
+  const trendData = trendPeriods.map(p => {
+    const entry = { period: fmtPeriod(p) };
+    COMPONENTS.forEach(({ name }) => {
+      const rows = allData.filter(r => r.reporting_period === p && r.component === name && r.pct_progress !== null);
+      if (rows.length) entry[name] = Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length);
+    });
+    return entry;
+  });
+
+  // Overall avg per period for summary bar
+  const periodSummary = trendPeriods.map(p => {
+    const rows = allData.filter(r => r.reporting_period === p && r.pct_progress !== null);
+    return { period: fmtPeriod(p), avg: rows.length ? Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length) : 0 };
+  });
+
+  // Enter Progress: active sub-sections for selected project
+  const epSubSections = structure.subSections.length ? structure.subSections : ['1A','1B','1C','2','3A','3B','4A','4B','5','6','7','8','9'];
+
+  async function saveProgress() {
+    if (!epPeriod) { setEpMsg('Select a reporting period first.'); return; }
+    setEpSaving(true); setEpMsg('');
+    const entries = [];
+    COMPONENTS.forEach(({ name, key }) => {
+      epSubSections.forEach(sub => {
+        const val = epGrid[`${sub}||${name}`];
+        if (val && val.pct !== '' && val.pct !== null) {
+          entries.push({
+            sub_section: sub,
+            section: subToSection(sub),
+            component: name,
+            key_activities: key,
+            pct_progress: val.pct,
+            remarks: val.remarks || '',
+          });
+        }
+      });
+    });
+    try {
+      await api.post('/construction/bulk', { reporting_period: epPeriod, project: epProject, entries });
+      setEpMsg(`✓ Saved ${entries.length} entries for ${fmtPeriod(epPeriod)}`);
+      loadAll();
+    } catch { setEpMsg('Error saving. Please try again.'); }
+    setEpSaving(false);
+  }
+
+  async function addSubSection() {
+    if (!newSection || !newSubSection) { setSettingMsg('Fill in section and sub-section.'); return; }
+    try {
+      await api.post('/construction/sub-sections', {
+        project: newProject || 'LCCH', section: newSection, sub_section: newSubSection,
+      });
+      setSettingMsg(`✓ Added sub-section ${newSubSection} under ${newSection}`);
+      setNewSubSection(''); loadAll();
+    } catch { setSettingMsg('Error adding sub-section.'); }
+  }
+
+  function subToSection(sub) {
+    if (['1A','1B','1C'].includes(sub)) return 'SECTION 1';
+    if (sub === '2') return 'SECTION 2';
+    if (['3A','3B'].includes(sub)) return 'SECTION 3';
+    if (['4A','4B'].includes(sub)) return 'SECTION 4';
+    const n = parseInt(sub); if (!isNaN(n) && n >= 5 && n <= 9) return `SECTION ${n}`;
+    return sub;
+  }
+
+  const TABS = [
+    { key: 'dashboard', label: '📊 Dashboard' },
+    { key: 'trend',     label: '📈 Trend' },
+    { key: 'enter',     label: '✏️ Enter Progress' },
+    { key: 'settings',  label: '⚙️ Settings' },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f0f4f8]">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="mr-4">
-              <h1 className="text-2xl font-black text-[#1a3c5e]">Construction Progress</h1>
-              <p className="text-sm text-gray-400 mt-0.5">Activity-level progress tracking across all sections</p>
-            </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black text-[#1a3c5e]">Construction Progress</h1>
+            <p className="text-sm text-gray-400">LCCH — Monthly reporting dashboard</p>
+          </div>
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.key ? 'bg-white text-[#1a3c5e] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <div className="flex flex-wrap gap-2 flex-1">
-              <select value={filters.reporting_period} onChange={e => setFilters(f => ({...f, reporting_period: e.target.value}))}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
-                <option value="">Period — All</option>
-                {periods.map(p => <option key={p} value={p}>{p}</option>)}
+        {/* ══════ DASHBOARD ══════ */}
+        {tab === 'dashboard' && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-3 flex flex-wrap gap-3 items-center">
+              <select value={selPeriod} onChange={e => setSelPeriod(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-semibold">
+                <option value="">All Periods</option>
+                {periods.map(p => <option key={p} value={p}>{fmtPeriod(p)}</option>)}
               </select>
-              <select value={filters.project} onChange={e => setFilters(f => ({...f, project: e.target.value}))}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
-                <option value="">Project — All</option>
-                {projects.map(p => <option key={p} value={p}>{p}</option>)}
+              <select value={selProject} onChange={e => setSelProject(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white">
+                <option value="">All Projects</option>
+                {structure.projects.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-              <select value={filters.section} onChange={e => setFilters(f => ({...f, section: e.target.value}))}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
-                <option value="">Section — All</option>
-                {sections.map(s => <option key={s} value={s}>{s}</option>)}
+              <select value={selSection} onChange={e => setSelSection(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white">
+                <option value="">All Sections</option>
+                {structure.sections.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              {Object.values(filters).some(Boolean) && (
-                <button onClick={() => setFilters({ project: '', section: '', reporting_period: '' })}
-                  className="px-3 py-2 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
-                  Clear
-                </button>
+              {(selPeriod || selProject || selSection) && (
+                <button onClick={() => { setSelPeriod(''); setSelProject(''); setSelSection(''); }}
+                  className="text-xs font-semibold text-red-500 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-50">Clear</button>
               )}
+              <span className="ml-auto text-xs text-gray-400">{dashData.length} activities</span>
             </div>
 
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {['table','grid','trend'].map(v => (
-                <button key={v} onClick={() => setView(v)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors capitalize ${view === v ? 'bg-white text-[#1a3c5e] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Overall Progress</p>
-            <p className="text-4xl font-black text-[#1a3c5e]">{overallAvg}%</p>
-            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${pctColor(overallAvg)}`} style={{ width: `${overallAvg}%` }} />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Activities Tracked</p>
-            <p className="text-4xl font-black text-[#1a3c5e]">{rows.length}</p>
-            <p className="text-xs text-gray-400 mt-1">{components.length} components</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Completed</p>
-            <p className="text-4xl font-black text-green-600">{rows.filter(r => Number(r.pct_progress) >= 100).length}</p>
-            <p className="text-xs text-gray-400 mt-1">activities at 100%</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Sections</p>
-            <p className="text-4xl font-black text-[#1a3c5e]">{sections.length}</p>
-            <p className="text-xs text-gray-400 mt-1">across {projects.length} project{projects.length !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        {/* Section summary bars */}
-        {sectionSummary.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider">Progress by Section</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sectionSummary.map(s => (
-                <div key={s.section} className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold text-gray-700">{s.section}</span>
-                    <span className="text-sm font-bold text-gray-900">{s.avg}%</span>
-                  </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${pctColor(s.avg)}`} style={{ width: `${s.avg}%` }} />
-                  </div>
-                  <p className="text-xs text-gray-400">{s.count} activities</p>
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Overall Progress', value: `${dashData.length ? Math.round(dashData.filter(r=>r.pct_progress!==null).reduce((s,r)=>s+Number(r.pct_progress),0)/dashData.filter(r=>r.pct_progress!==null).length||0) : 0}%`, color: 'text-[#1a3c5e]' },
+                { label: 'Activities Tracked', value: dashData.length, color: 'text-[#1a3c5e]' },
+                { label: 'Completed (100%)', value: dashData.filter(r=>Number(r.pct_progress)>=100).length, color: 'text-green-600' },
+                { label: 'In Progress', value: dashData.filter(r=>Number(r.pct_progress)>0&&Number(r.pct_progress)<100).length, color: 'text-blue-600' },
+              ].map(k => (
+                <div key={k.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{k.label}</p>
+                  <p className={`text-4xl font-black ${k.color}`}>{k.value}</p>
                 </div>
               ))}
             </div>
-          </div>
-        )}
 
-        {/* TABLE VIEW */}
-        {view === 'table' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100">
-              <span className="text-sm font-semibold text-gray-700">{rows.length} activities</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-left">
-                    {['Section','Sub-section','Component','Key Activity','Progress','Status','Remarks',''].map(h => (
-                      <th key={h} className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {loading && <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">Loading...</td></tr>}
-                  {!loading && rows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No data found.</td></tr>}
-                  {rows.map(r => (
-                    <tr key={r.id} className="hover:bg-blue-50/20 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-[#1a3c5e] whitespace-nowrap">{r.section}</td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{r.sub_section || '—'}</td>
-                      <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{r.component}</td>
-                      <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{r.key_activities}</td>
-                      <td className="px-4 py-3 min-w-[160px]"><ProgressBar value={r.pct_progress} /></td>
-                      <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={r.status} /></td>
-                      <td className="px-4 py-3 text-gray-400 text-xs max-w-[120px] truncate">{r.remarks || '—'}</td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => setEditing({ id: r.id, pct_progress: r.pct_progress, status: r.status || 'Not Started', remarks: r.remarks || '' })}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+            {/* Section summary bars */}
+            {dashSections.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Progress by Section</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {dashSections.map(sec => {
+                    const secRows = dashData.filter(r => r.section === sec && r.pct_progress !== null);
+                    const avg = secRows.length ? Math.round(secRows.reduce((s,r)=>s+Number(r.pct_progress),0)/secRows.length) : 0;
+                    return (
+                      <div key={sec}>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="text-sm font-bold text-gray-800">{sec}</span>
+                          <span className={`text-sm font-black ${avg>=80?'text-green-600':avg>=50?'text-blue-600':'text-amber-600'}`}>{avg}%</span>
+                        </div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pctBar(avg)}`} style={{width:`${avg}%`}} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">{secRows.length} activities · {selPeriod ? fmtPeriod(selPeriod) : 'all periods'}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-        {/* GRID VIEW — components × sections */}
-        {view === 'grid' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-[#1a3c5e] text-white">
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider sticky left-0 bg-[#1a3c5e] min-w-[220px]">Component</th>
-                    {sections.map(s => (
-                      <th key={s} className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap min-w-[110px]">{s}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {gridData.map((row, i) => (
-                    <tr key={row.component} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                      <td className="px-4 py-3 sticky left-0 bg-inherit border-r border-gray-100">
-                        <div className="font-semibold text-gray-800 text-sm">{row.component}</div>
-                        <div className="text-xs text-gray-400 truncate max-w-[200px]">{row.key_activities}</div>
-                      </td>
-                      {sections.map(sec => {
-                        const cell = row.cells[sec];
-                        const pct = cell ? Number(cell.pct_progress) : null;
+            {/* Heat matrix: Components × Sub-sections */}
+            {dashData.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Progress Matrix — Component × Sub-section</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Color = progress level · Click a cell to see details</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-[#1a3c5e] text-white">
+                        <th className="px-4 py-3 text-left text-xs font-bold sticky left-0 bg-[#1a3c5e] min-w-[240px]">Component</th>
+                        {dashSubSections.map(sub => (
+                          <th key={sub} className="px-3 py-3 text-center text-xs font-bold min-w-[70px] whitespace-nowrap">{sub}</th>
+                        ))}
+                        <th className="px-3 py-3 text-center text-xs font-bold min-w-[70px]">Avg</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashComponents.map((comp, ci) => {
+                        const compCells = dashSubSections.map(sub => getCell(comp, sub));
+                        const filled = compCells.filter(c => c && c.pct_progress !== null);
+                        const avg = filled.length ? Math.round(filled.reduce((s,c)=>s+Number(c.pct_progress),0)/filled.length) : null;
                         return (
-                          <td key={sec} className="px-3 py-3 text-center">
-                            {pct === null ? (
-                              <span className="text-gray-300 text-xs">—</span>
-                            ) : (
-                              <div className="space-y-1">
-                                <div className={`text-sm font-black ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-blue-600' : pct >= 25 ? 'text-amber-600' : 'text-red-500'}`}>
-                                  {pct}%
-                                </div>
-                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mx-2">
-                                  <div className={`h-full rounded-full ${pctColor(pct)}`} style={{ width: `${pct}%` }} />
-                                </div>
-                              </div>
-                            )}
-                          </td>
+                          <tr key={comp} className={ci%2===0?'bg-white':'bg-gray-50/50'}>
+                            <td className="px-4 py-2.5 sticky left-0 bg-inherit border-r border-gray-100">
+                              <div className="font-semibold text-gray-800 text-xs leading-tight">{comp}</div>
+                            </td>
+                            {dashSubSections.map(sub => {
+                              const cell = getCell(comp, sub);
+                              const pct = cell?.pct_progress;
+                              return (
+                                <td key={sub} className="px-1 py-1 text-center">
+                                  {pct === null || pct === undefined ? (
+                                    <span className="text-gray-200 text-xs">—</span>
+                                  ) : (
+                                    <div className={`mx-1 py-1.5 rounded-lg text-xs font-black ${pctBg(pct)}`}>
+                                      {Number(pct)}%
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="px-1 py-1 text-center">
+                              {avg !== null && (
+                                <div className={`mx-1 py-1.5 rounded-lg text-xs font-black border ${pctBg(avg)}`}>{avg}%</div>
+                              )}
+                            </td>
+                          </tr>
                         );
                       })}
-                    </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {/* Legend */}
+                <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-3">
+                  {[['≥100%','bg-green-100 text-green-800'],['≥75%','bg-emerald-100 text-emerald-700'],['≥50%','bg-blue-100 text-blue-700'],['≥25%','bg-amber-100 text-amber-700'],['<25%','bg-red-100 text-red-700']].map(([l,c])=>(
+                    <div key={l} className="flex items-center gap-1.5">
+                      <div className={`w-8 h-4 rounded text-xs flex items-center justify-center font-bold ${c}`}>{l}</div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            )}
+
+            {loading && <div className="text-center py-16 text-gray-400">Loading…</div>}
+            {!loading && dashData.length === 0 && (
+              <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+                No data for selected filters. Use <strong>Enter Progress</strong> to add monthly data.
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-        {/* TREND VIEW — progress over time per component */}
-        {view === 'trend' && (() => {
-          const trendPeriods = [...new Set(allRows.map(r => r.reporting_period))].filter(Boolean).sort();
-          const trendComponents = [...new Set(allRows.map(r => r.component))].filter(Boolean);
-          const COLORS = ['#1a3c5e','#e63946','#2a9d8f','#e9c46a','#f4a261','#264653','#8338ec','#3a86ff','#fb5607','#06d6a0'];
-
-          // For each period, compute avg progress per component across all sub-sections
-          const trendData = trendPeriods.map(p => {
-            const entry = { period: p.slice(0, 7) }; // YYYY-MM
-            trendComponents.forEach(comp => {
-              const compRows = allRows.filter(r => r.reporting_period === p && r.component === comp && r.pct_progress !== null);
-              if (compRows.length) {
-                entry[comp] = Math.round(compRows.reduce((s, r) => s + Number(r.pct_progress), 0) / compRows.length);
-              }
-            });
-            return entry;
-          });
-
-          return (
+        {/* ══════ TREND ══════ */}
+        {tab === 'trend' && (
+          <div className="space-y-4">
+            {/* Period summary */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <h3 className="text-sm font-bold text-gray-700 mb-5 uppercase tracking-wider">Progress Trend — All Components Over Time</h3>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={periodSummary} barSize={40}>
+                  <XAxis dataKey="period" tick={{fontSize:11}} />
+                  <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
+                  <Tooltip formatter={v=>[`${v}%`,'Avg Progress']} />
+                  <Bar dataKey="avg" fill="#1a3c5e" radius={[6,6,0,0]} label={{position:'top',fontSize:11,fontWeight:700}} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Component trend lines */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
               <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={trendData} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                  <YAxis domain={[0,100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v, name) => [`${v}%`, name]} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {trendComponents.map((comp, i) => (
-                    <Line key={comp} type="monotone" dataKey={comp} stroke={COLORS[i % COLORS.length]}
-                      strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                <LineChart data={trendData} margin={{left:10,right:20,top:5,bottom:5}}>
+                  <XAxis dataKey="period" tick={{fontSize:11}} />
+                  <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
+                  <Tooltip formatter={(v,name)=>[`${v}%`,name]} />
+                  <Legend wrapperStyle={{fontSize:11}} />
+                  {COMPONENTS.map(({name},i) => (
+                    <Line key={name} type="monotone" dataKey={name} stroke={COLORS[i%COLORS.length]}
+                      strokeWidth={2} dot={{r:4}} connectNulls />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          );
-        })()}
 
-      {/* Edit modal */}
-      {editing && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-5">Update Progress</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Progress (%)</label>
-                <input type="number" min="0" max="100"
-                  value={editing.pct_progress}
-                  onChange={e => setEditing(v => ({...v, pct_progress: Number(e.target.value)}))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] text-lg font-bold" />
-                <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${pctColor(editing.pct_progress)}`} style={{ width: `${editing.pct_progress}%` }} />
-                </div>
+            {/* Section trend table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
-                <select value={editing.status} onChange={e => setEditing(v => ({...v, status: e.target.value}))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
-                  {Object.keys(STATUS_META).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Section</th>
+                      {trendPeriods.map(p => <th key={p} className="px-4 py-3 text-center text-xs font-bold text-gray-400 uppercase whitespace-nowrap">{fmtPeriod(p)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {structure.sections.map(sec => (
+                      <tr key={sec} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-bold text-[#1a3c5e]">{sec}</td>
+                        {trendPeriods.map(p => {
+                          const rows = allData.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
+                          const avg = rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : null;
+                          return (
+                            <td key={p} className="px-4 py-3 text-center">
+                              {avg === null ? <span className="text-gray-300">—</span> : (
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-black ${pctBg(avg)}`}>{avg}%</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Remarks</label>
-                <textarea rows={3} value={editing.remarks} onChange={e => setEditing(v => ({...v, remarks: e.target.value}))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] resize-none" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={saveEdit} disabled={saving}
-                className="flex-1 py-2.5 bg-[#1a3c5e] text-white font-bold rounded-xl hover:bg-[#122d47] transition-colors disabled:opacity-50">
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-              <button onClick={() => setEditing(null)}
-                className="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ══════ ENTER PROGRESS ══════ */}
+        {tab === 'enter' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Monthly Data Entry</p>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Reporting Period *</label>
+                  <input type="month" value={epPeriod ? epPeriod.slice(0,7) : ''}
+                    onChange={e => setEpPeriod(e.target.value ? e.target.value + '-01' : '')}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Project</label>
+                  <select value={epProject} onChange={e => setEpProject(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white">
+                    {(structure.projects.length ? structure.projects : ['LCCH']).map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="text-xs text-gray-400 self-end pb-2">Enter % progress (0–100) for each component × sub-section</div>
+              </div>
+            </div>
+
+            {epPeriod && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#1a3c5e] text-white">
+                        <th className="px-4 py-3 text-left text-xs font-bold sticky left-0 bg-[#1a3c5e] min-w-[220px]">Component</th>
+                        {epSubSections.map(sub => (
+                          <th key={sub} className="px-2 py-3 text-center text-xs font-bold min-w-[72px]">{sub}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {COMPONENTS.map(({ name }, ci) => (
+                        <tr key={name} className={ci%2===0?'bg-white':'bg-gray-50/50'}>
+                          <td className="px-4 py-2 sticky left-0 bg-inherit border-r border-gray-100 text-xs font-semibold text-gray-700">{name}</td>
+                          {epSubSections.map(sub => {
+                            const k = `${sub}||${name}`;
+                            const val = epGrid[k] || { pct: '', remarks: '' };
+                            const pct = val.pct;
+                            return (
+                              <td key={sub} className="px-1.5 py-1.5 text-center">
+                                <input
+                                  type="number" min="0" max="100"
+                                  value={pct === null || pct === undefined ? '' : pct}
+                                  onChange={e => setEpGrid(g => ({...g, [k]: {...(g[k]||{}), pct: e.target.value === '' ? '' : Number(e.target.value)}}))}
+                                  placeholder="—"
+                                  className={`w-14 text-center text-xs font-bold py-1.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-[#1a3c5e] ${pct !== '' && pct !== null && pct !== undefined ? pctBg(pct) + ' border-transparent' : 'border-gray-200 text-gray-400'}`}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-5 py-4 border-t border-gray-100 flex items-center gap-4">
+                  <button onClick={saveProgress} disabled={epSaving}
+                    className="px-6 py-2.5 bg-[#1a3c5e] text-white font-bold rounded-xl hover:bg-[#122d47] disabled:opacity-50 transition-colors">
+                    {epSaving ? 'Saving…' : '✓ Save Progress Report'}
+                  </button>
+                  {epMsg && <span className={`text-sm font-semibold ${epMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{epMsg}</span>}
+                </div>
+              </div>
+            )}
+
+            {!epPeriod && (
+              <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+                Select a reporting period above to start entering data.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════ SETTINGS ══════ */}
+        {tab === 'settings' && (
+          <div className="space-y-4">
+            {/* Ideas panel */}
+            <div className="bg-gradient-to-br from-[#1a3c5e] to-[#2a5c8e] rounded-2xl p-5 text-white">
+              <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-3">💡 Ideas to make this more efficient</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[
+                  ['📎 Excel Upload', 'Drop a monthly report file → auto-imports all data without running scripts'],
+                  ['🎯 Target vs Actual', 'Add a planned % per activity per month to compare against real progress'],
+                  ['🔴 Delay Alerts', 'Flag activities where actual progress is more than 10% below target'],
+                  ['📧 PM Submission Reminders', 'Email Placide automatically on the 1st of each month to fill in progress'],
+                  ['📄 PDF Report Export', 'One-click export of the progress matrix as a PDF report for EBID-ECOWAS'],
+                  ['📐 S-Curve', 'Plot cumulative planned vs actual progress over the project lifetime'],
+                ].map(([title, desc]) => (
+                  <div key={title} className="bg-white/10 rounded-xl p-3">
+                    <p className="font-bold text-sm">{title}</p>
+                    <p className="text-xs opacity-80 mt-1">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Add sub-section */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Add New Sub-Section</p>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Project</label>
+                  <input value={newProject} onChange={e => setNewProject(e.target.value)} placeholder="LCCH"
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-32 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Section</label>
+                  <input value={newSection} onChange={e => setNewSection(e.target.value)} placeholder="SECTION 10"
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Section</label>
+                  <input value={newSubSection} onChange={e => setNewSubSection(e.target.value)} placeholder="10A"
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-28 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <button onClick={addSubSection}
+                  className="px-4 py-2 bg-[#1a3c5e] text-white text-sm font-bold rounded-lg hover:bg-[#122d47] transition-colors">
+                  + Add
+                </button>
+              </div>
+              {settingMsg && <p className={`mt-3 text-sm font-semibold ${settingMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{settingMsg}</p>}
+            </div>
+
+            {/* Current structure */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Current Structure</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-sm font-bold text-gray-700 mb-2">Projects</p>
+                  {structure.projects.map(p => <div key={p} className="text-sm text-gray-600 py-1 border-b border-gray-50">{p}</div>)}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-700 mb-2">Sections</p>
+                  {structure.sections.map(s => <div key={s} className="text-sm text-gray-600 py-1 border-b border-gray-50">{s}</div>)}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-700 mb-2">Sub-Sections</p>
+                  <div className="flex flex-wrap gap-2">
+                    {structure.subSections.map(s => (
+                      <span key={s} className="px-2 py-1 bg-[#1a3c5e] text-white text-xs font-bold rounded-lg">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
