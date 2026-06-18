@@ -41,6 +41,17 @@ function fmtPeriod(p) {
   return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
+// Order by the section number embedded in the code/name (Section 1 before Section 2),
+// then alphabetically. So SOK-1A, SOK-1B come before KEB-2A, KEB-2B.
+function bySectionOrder(a, b) {
+  const na = (String(a).match(/(\d+)/) || [])[1];
+  const nb = (String(b).match(/(\d+)/) || [])[1];
+  const da = na ? parseInt(na) : 999;
+  const db = nb ? parseInt(nb) : 999;
+  if (da !== db) return da - db;
+  return String(a).localeCompare(String(b));
+}
+
 function StatCard({ label, value, accent }) {
   return (
     <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-4">
@@ -244,9 +255,9 @@ export default function ConstructionProgress() {
               const projData = dashData.filter(r => r.project === project);
               if (projData.length === 0) return null;
 
-              const projSubSections = [...new Set(projData.map(r => r.sub_section))].filter(Boolean).sort();
+              const projSubSections = [...new Set(projData.map(r => r.sub_section))].filter(Boolean).sort(bySectionOrder);
               const projComponents  = COMPONENTS.map(c => c.name).filter(n => projData.some(r => r.component === n));
-              const projSections    = [...new Set(projData.map(r => r.section))].filter(Boolean).sort();
+              const projSections    = [...new Set(projData.map(r => r.section))].filter(Boolean).sort(bySectionOrder);
 
               const filled = projData.filter(r => r.pct_progress !== null);
               const projAvg = filled.length ? Math.round(filled.reduce((s,r) => s + Number(r.pct_progress), 0) / filled.length) : 0;
