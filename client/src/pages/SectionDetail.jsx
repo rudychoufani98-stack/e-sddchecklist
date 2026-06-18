@@ -213,7 +213,7 @@ export default function SectionDetail({ user }) {
       </div>
 
       {/* Deliverables table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden mb-6">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-semibold text-gray-800 text-sm">Required Documentation</h3>
           {!isAdmin && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Read-only</span>}
@@ -252,7 +252,7 @@ export default function SectionDetail({ user }) {
 
       {/* Project documents */}
       {docTypes.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div className="bg-white rounded-2xl shadow-sm border border-amber-100 p-5">
           <h3 className="font-semibold text-gray-800 text-sm mb-4">Project Documents</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {docTypes.map(doc => (

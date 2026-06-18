@@ -180,7 +180,7 @@ export default function DataRoom({ user }) {
           const sectionFiles = files.filter((f) => f.section_id === section.id);
           if (sectionFiles.length === 0) return null;
           return (
-            <div key={section.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div key={section.id} className="bg-white rounded-xl shadow-sm border border-amber-100 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-semibold text-[#1a3c5e]">{section.name}</h3>
                 <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
@@ -242,7 +242,7 @@ export default function DataRoom({ user }) {
         })}
 
         {files.length === 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+          <div className="bg-white rounded-xl shadow-sm border border-amber-100 p-12 text-center">
             <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
             </svg>

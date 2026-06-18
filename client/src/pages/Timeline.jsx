@@ -170,7 +170,7 @@ export default function Timeline() {
       </div>
 
       {/* Gantt chart */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
         {/* Month header row */}
         <div className="flex border-b border-gray-100 bg-gray-50/80 sticky top-0 z-10">
           <div style={{ width: LABEL_W, minWidth: LABEL_W }} className="flex-shrink-0 px-4 py-3 border-r border-gray-100">

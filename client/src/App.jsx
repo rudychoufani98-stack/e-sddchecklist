@@ -37,7 +37,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#f8fafc]">
+      <div className="min-h-screen bg-[#FDF6E3]">
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>

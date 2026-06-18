@@ -43,7 +43,7 @@ function fmtPeriod(p) {
 
 function StatCard({ label, value, accent }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-5 py-4">
+    <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-4">
       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{label}</p>
       <p className={`text-3xl font-black ${accent || 'text-slate-800'}`}>{value}</p>
     </div>
@@ -187,7 +187,7 @@ export default function ConstructionProgress() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#FDF6E3]">
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
         {/* ── Header ── */}
@@ -196,7 +196,7 @@ export default function ConstructionProgress() {
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">Construction Progress</h1>
             <p className="text-sm text-slate-400 mt-0.5">Monthly construction reporting across all projects</p>
           </div>
-          <div className="flex gap-1 bg-white border border-slate-200/70 rounded-xl p-1 shadow-sm">
+          <div className="flex gap-1 bg-white border border-amber-100 rounded-xl p-1 shadow-sm">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? 'bg-[#1a3c5e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
@@ -210,7 +210,7 @@ export default function ConstructionProgress() {
         {tab === 'dashboard' && (
           <div className="space-y-5">
             {/* Filter bar */}
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filters</span>
               <select value={selProject} onChange={e => setSelProject(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-medium text-slate-700">
@@ -258,7 +258,7 @@ export default function ConstructionProgress() {
               }
 
               return (
-                <div key={project} className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+                <div key={project} className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
                   {/* Project header strip */}
                   <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-[#1a3c5e] to-[#28527a]">
                     <div className="flex items-center gap-3">
@@ -345,7 +345,7 @@ export default function ConstructionProgress() {
             })}
 
             {!loading && dashData.length === 0 && (
-              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-200/70">
+              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-amber-100">
                 No data for the selected filters. Use <strong>Enter Progress</strong> to add monthly data.
               </div>
             )}
@@ -355,7 +355,7 @@ export default function ConstructionProgress() {
         {/* ══════ TREND ══════ */}
         {tab === 'trend' && (
           <div className="space-y-5">
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={periodSummary} barSize={40}>
@@ -367,7 +367,7 @@ export default function ConstructionProgress() {
               </ResponsiveContainer>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
               <ResponsiveContainer width="100%" height={380}>
                 <LineChart data={trendData} margin={{left:10,right:20,top:5,bottom:5}}>
@@ -383,7 +383,7 @@ export default function ConstructionProgress() {
               </ResponsiveContainer>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-slate-100">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
               </div>
@@ -422,7 +422,7 @@ export default function ConstructionProgress() {
         {/* ══════ ENTER PROGRESS ══════ */}
         {tab === 'enter' && (
           <div className="space-y-5">
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Monthly Data Entry</p>
               <div className="flex flex-wrap gap-4 items-end">
                 <div>
@@ -443,7 +443,7 @@ export default function ConstructionProgress() {
             </div>
 
             {epPeriod && (
-              <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+              <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm border-collapse">
                     <thead>
@@ -490,7 +490,7 @@ export default function ConstructionProgress() {
             )}
 
             {!epPeriod && (
-              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-200/70">
+              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-amber-100">
                 Select a reporting period above to start entering data.
               </div>
             )}
@@ -519,7 +519,7 @@ export default function ConstructionProgress() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Add New Sub-Section</p>
               <div className="flex flex-wrap gap-3 items-end">
                 <div>
@@ -545,7 +545,7 @@ export default function ConstructionProgress() {
               {settingMsg && <p className={`mt-3 text-sm font-semibold ${settingMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{settingMsg}</p>}
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Current Structure</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>

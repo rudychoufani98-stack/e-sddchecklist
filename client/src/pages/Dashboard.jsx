@@ -87,7 +87,7 @@ function SectionCard({ section, index, isAdmin, onDelete }) {
 
   return (
     <div
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer group"
+      className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer group"
       style={{ opacity: animated ? 1 : 0, transform: animated ? 'translateY(0)' : 'translateY(12px)', transition: 'opacity 0.4s ease, transform 0.4s ease' }}
       onClick={() => navigate(`/sections/${section.id}`)}
     >
