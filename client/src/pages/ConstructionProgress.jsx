@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const STATUS_META = {
   'Completed':   { bg: 'bg-green-100',  text: 'text-green-700',  dot: 'bg-green-500'  },
@@ -45,7 +46,8 @@ export default function ConstructionProgress() {
   const [filters, setFilters]     = useState({ project: '', section: '', reporting_period: '' });
   const [editing, setEditing]     = useState(null); // { id, pct_progress, status, remarks }
   const [saving, setSaving]       = useState(false);
-  const [view, setView]           = useState('table'); // 'table' | 'grid'
+  const [view, setView]           = useState('table'); // 'table' | 'grid' | 'trend' | 'trend'
+  const [allRows, setAllRows]     = useState([]); // unfiltered, for trend
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,12 +56,14 @@ export default function ConstructionProgress() {
       if (filters.project)          params.set('project', filters.project);
       if (filters.section)          params.set('section', filters.section);
       if (filters.reporting_period) params.set('reporting_period', filters.reporting_period);
-      const [rRows, rPeriods] = await Promise.all([
+      const [rRows, rPeriods, rAll] = await Promise.all([
         api.get(`/construction?${params}`),
         api.get('/construction/periods'),
+        api.get('/construction'),
       ]);
       setRows(rRows.data);
       setPeriods(rPeriods.data);
+      setAllRows(rAll.data);
     } catch {}
     setLoading(false);
   }, [filters]);
@@ -144,7 +148,7 @@ export default function ConstructionProgress() {
             </div>
 
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {['table','grid'].map(v => (
+              {['table','grid','trend'].map(v => (
                 <button key={v} onClick={() => setView(v)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors capitalize ${view === v ? 'bg-white text-[#1a3c5e] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   {v}
@@ -290,6 +294,43 @@ export default function ConstructionProgress() {
           </div>
         )}
       </div>
+
+        {/* TREND VIEW — progress over time per component */}
+        {view === 'trend' && (() => {
+          const trendPeriods = [...new Set(allRows.map(r => r.reporting_period))].filter(Boolean).sort();
+          const trendComponents = [...new Set(allRows.map(r => r.component))].filter(Boolean);
+          const COLORS = ['#1a3c5e','#e63946','#2a9d8f','#e9c46a','#f4a261','#264653','#8338ec','#3a86ff','#fb5607','#06d6a0'];
+
+          // For each period, compute avg progress per component across all sub-sections
+          const trendData = trendPeriods.map(p => {
+            const entry = { period: p.slice(0, 7) }; // YYYY-MM
+            trendComponents.forEach(comp => {
+              const compRows = allRows.filter(r => r.reporting_period === p && r.component === comp && r.pct_progress !== null);
+              if (compRows.length) {
+                entry[comp] = Math.round(compRows.reduce((s, r) => s + Number(r.pct_progress), 0) / compRows.length);
+              }
+            });
+            return entry;
+          });
+
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-bold text-gray-700 mb-5 uppercase tracking-wider">Progress Trend — All Components Over Time</h3>
+              <ResponsiveContainer width="100%" height={380}>
+                <LineChart data={trendData} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0,100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v, name) => [`${v}%`, name]} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {trendComponents.map((comp, i) => (
+                    <Line key={comp} type="monotone" dataKey={comp} stroke={COLORS[i % COLORS.length]}
+                      strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })()}
 
       {/* Edit modal */}
       {editing && (
