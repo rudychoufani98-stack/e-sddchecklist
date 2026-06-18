@@ -23,14 +23,14 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#FDF6E3] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#1a3c5e] rounded-2xl mb-4 shadow-lg">
-            <span className="text-white font-bold text-2xl">ES</span>
-          </div>
-          <h1 className="text-2xl font-bold text-[#1a3c5e]">E&amp;S Due Diligence Tracker</h1>
-          <p className="text-gray-500 text-sm mt-1">LCCH Environmental &amp; Social Management</p>
+          <svg viewBox="0 0 100 100" className="w-16 h-16 mx-auto mb-4 drop-shadow" aria-hidden="true">
+            <path d="M50 3 Q50 50 97 50 Q50 50 50 97 Q50 50 3 50 Q50 50 50 3 Z" fill="#1a3c5e" />
+          </svg>
+          <h1 className="text-3xl font-black text-[#1a3c5e] tracking-tight">Skykapital</h1>
+          <p className="text-gray-500 text-sm mt-1">E&amp;S Due Diligence Tracker</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-md p-8">

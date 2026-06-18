@@ -156,12 +156,12 @@ export default function NavBar({ user, onLogout }) {
           {/* Logo + nav */}
           <div className="flex items-center gap-6">
             <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-md ring-1 ring-[#FFD700]/40 group-hover:ring-[#FFD700] transition-all">
-                <span className="text-[#1a3c5e] font-black text-xs tracking-tight">ES</span>
-              </div>
+              <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0" aria-hidden="true">
+                <path d="M50 3 Q50 50 97 50 Q50 50 50 97 Q50 50 3 50 Q50 50 50 3 Z" fill="white" />
+              </svg>
               <div>
-                <div className="text-white font-bold text-sm leading-tight">E&amp;S Due Diligence</div>
-                <div className="text-blue-300/90 text-[10px] leading-tight tracking-wide">ESG Tracker</div>
+                <div className="text-white font-bold text-base leading-tight tracking-tight">Skykapital</div>
+                <div className="text-blue-300/90 text-[10px] leading-tight tracking-wide">E&amp;S Due Diligence Tracker</div>
               </div>
             </Link>
 
