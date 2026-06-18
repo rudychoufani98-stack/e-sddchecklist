@@ -99,6 +99,7 @@ export default function NavBar({ user, onLogout }) {
               {user?.role !== 'submitter' && navLink('/', 'Dashboard')}
               {user?.role !== 'submitter' && navLink('/timeline', 'Timeline')}
               {user?.role !== 'submitter' && navLink('/data-room', 'Data Room')}
+              {user?.role === 'admin' && navLink('/construction', 'Construction')}
 
               {user?.role === 'submitter' ? (
                 <>

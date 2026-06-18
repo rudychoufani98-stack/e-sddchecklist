@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import SectionDetail from './pages/SectionDetail';
 import DataRoom from './pages/DataRoom';
 import Timeline from './pages/Timeline';
+import ConstructionProgress from './pages/ConstructionProgress';
 import ExternalGrievances from './pages/grv/ExternalGrievances';
 import SubmitGrievance from './pages/grv/SubmitGrievance';
 import GrvSettings from './pages/grv/GrvSettings';
@@ -50,7 +51,8 @@ export default function App() {
                 <Route path="/"                element={<Dashboard />} />
                 <Route path="/sections/:id"    element={<SectionDetail user={user} />} />
                 <Route path="/data-room"       element={<DataRoom user={user} />} />
-                <Route path="/timeline"        element={<Timeline />} />
+                <Route path="/timeline"              element={<Timeline />} />
+                <Route path="/construction"         element={<ConstructionProgress />} />
                 <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />
                 <Route path="/grv/settings"    element={<GrvSettings user={user} />} />
