@@ -114,9 +114,10 @@ export default function NavBar({ user, onLogout }) {
                   <DropdownMenu
                     label="ESG Data Collection"
                     items={[
-                      { path: '/grv/grievances', label: 'External Grievances' },
-                      { path: '/grv/submit',     label: 'Submit Grievance' },
-                      { path: '/grv/settings',   label: 'Project Settings' },
+                      { path: '/grv/grievances',           label: 'External Grievances' },
+                      { path: '/grv/resolving-solutions',  label: 'Resolving Solutions' },
+                      { path: '/grv/submit',               label: 'Submit Grievance' },
+                      { path: '/grv/settings',             label: 'Project Settings' },
                     ]}
                   />
                   {user?.role === 'admin' && navLink('/construction', 'Construction Progress')}

@@ -64,6 +64,11 @@ export default function ExternalGrievances({ user }) {
   const [selected, setSelected] = useState(null);
   const [closingId, setClosingId] = useState(null);
 
+  // Close modal state
+  const [closeModal, setCloseModal] = useState(null); // grievance object to close
+  const [closeSolution, setCloseSolution] = useState('');
+  const [closeError, setCloseError] = useState('');
+
   // Filters
   const [filters, setFilters] = useState({
     project_id: '', sub_section_id: '', escalation_level: '', from: '', to: '',
@@ -95,16 +100,37 @@ export default function ExternalGrievances({ user }) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  async function toggleStatus(g) {
-    const newStatus = g.status === 'open' ? 'closed' : 'open';
+  function initiateClose(g) {
+    if (g.status === 'open') {
+      setCloseModal(g);
+      setCloseSolution('');
+      setCloseError('');
+    } else {
+      // Reopen — no modal needed
+      doToggleStatus(g, 'open', '');
+    }
+  }
+
+  async function doToggleStatus(g, newStatus, solution) {
     setClosingId(g.id);
     try {
-      await api.patch(`/grievances/${g.id}`, { status: newStatus });
-      setGrievances(prev => prev.map(x => x.id === g.id ? { ...x, status: newStatus } : x));
-      if (selected?.id === g.id) setSelected(s => ({ ...s, status: newStatus }));
+      const patch = { status: newStatus };
+      if (newStatus === 'closed') {
+        patch.resolving_solution = solution;
+        patch.closed_at = new Date().toISOString();
+      }
+      await api.patch(`/grievances/${g.id}`, patch);
+      setGrievances(prev => prev.map(x => x.id === g.id ? { ...x, ...patch } : x));
+      if (selected?.id === g.id) setSelected(s => ({ ...s, ...patch }));
       loadAll();
     } catch {}
     setClosingId(null);
+  }
+
+  async function submitCloseModal() {
+    if (!closeSolution.trim()) { setCloseError('Resolving solution is required.'); return; }
+    setCloseModal(null);
+    await doToggleStatus(closeModal, 'closed', closeSolution.trim());
   }
 
   async function handleDelete(id) {
@@ -353,7 +379,7 @@ export default function ExternalGrievances({ user }) {
                             {isAdmin && (
                               <>
                                 <button
-                                  onClick={() => toggleStatus(g)}
+                                  onClick={() => initiateClose(g)}
                                   disabled={closingId === g.id}
                                   className={`px-2 py-1 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 ${
                                     g.status === 'open'
@@ -380,6 +406,43 @@ export default function ExternalGrievances({ user }) {
         )}
       </div>
 
+      {/* ── CLOSE MODAL ── */}
+      {closeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setCloseModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+              <p className="text-base font-black text-[#1a3c5e]">Close Grievance</p>
+              <p className="text-xs text-gray-400 mt-0.5 font-mono">{closeModal.reference_no}</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                  Resolving Solution <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={5}
+                  value={closeSolution}
+                  onChange={e => { setCloseSolution(e.target.value); setCloseError(''); }}
+                  placeholder="Describe the actions taken to resolve this grievance, the outcome reached, and any agreements made with the complainant..."
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] resize-none"
+                />
+                {closeError && <p className="text-xs text-red-600 mt-1">{closeError}</p>}
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3 justify-end">
+              <button onClick={() => setCloseModal(null)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={submitCloseModal}
+                className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors">
+                ✓ Confirm Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── DETAIL PANEL ── */}
       {selected && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setSelected(null)}>
@@ -391,7 +454,7 @@ export default function ExternalGrievances({ user }) {
               </div>
               <div className="flex items-center gap-2">
                 {isAdmin && (
-                  <button onClick={() => toggleStatus(selected)} disabled={closingId === selected.id}
+                  <button onClick={() => initiateClose(selected)} disabled={closingId === selected.id}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
                       selected.status === 'open'
                         ? 'bg-green-600 text-white hover:bg-green-700'
@@ -425,6 +488,8 @@ export default function ExternalGrievances({ user }) {
                 ['Next Follow-up',   selected.next_follow_up_date],
                 ['PDCA',             selected.pdca?.toUpperCase()],
                 ['Lesson Learned',   selected.lesson_learned],
+                ['Resolving Solution', selected.resolving_solution],
+                ['Closed At',        selected.closed_at ? new Date(selected.closed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
                 ['Submitted by',     selected.submitted_by],
               ].filter(([,v]) => v && v !== '—').map(([label, value]) => (
                 <div key={label} className="grid grid-cols-5 gap-2 py-1.5 border-b border-gray-50 last:border-0">

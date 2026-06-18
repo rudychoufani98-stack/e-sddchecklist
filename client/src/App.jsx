@@ -9,6 +9,7 @@ import ConstructionProgress from './pages/ConstructionProgress';
 import ExternalGrievances from './pages/grv/ExternalGrievances';
 import SubmitGrievance from './pages/grv/SubmitGrievance';
 import GrvSettings from './pages/grv/GrvSettings';
+import ResolvingSolutions from './pages/grv/ResolvingSolutions';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -55,7 +56,8 @@ export default function App() {
                 <Route path="/construction"         element={<ConstructionProgress />} />
                 <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />
-                <Route path="/grv/settings"    element={<GrvSettings user={user} />} />
+                <Route path="/grv/settings"          element={<GrvSettings user={user} />} />
+                <Route path="/grv/resolving-solutions" element={<ResolvingSolutions user={user} />} />
                 <Route path="/login"           element={<Navigate to="/" />} />
                 <Route path="*"               element={<Navigate to="/" />} />
               </>
