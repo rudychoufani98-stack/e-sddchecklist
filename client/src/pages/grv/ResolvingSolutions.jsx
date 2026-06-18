@@ -122,9 +122,9 @@ export default function ResolvingSolutions({ user }) {
                     <td className="px-4 py-3 text-xs font-medium text-gray-700 whitespace-nowrap">{g.project_name || '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{g.community_name || '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate">{g.nature_of_grievance?.replace(/_/g,' ') || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-700 max-w-[260px]">
+                    <td className="px-4 py-3 text-xs text-gray-700 max-w-[420px] min-w-[280px]">
                       {g.resolving_solution
-                        ? <span className="line-clamp-2">{g.resolving_solution}</span>
+                        ? <span className="whitespace-pre-wrap leading-relaxed">{g.resolving_solution}</span>
                         : <span className="italic text-amber-500">Not documented</span>
                       }
                     </td>
@@ -161,10 +161,10 @@ export default function ResolvingSolutions({ user }) {
             {/* Resolving Solution highlight */}
             <div className="px-5 pt-4">
               <div className={`rounded-xl p-4 mb-4 ${selected.resolving_solution ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
-                <p className="text-xs font-bold uppercase tracking-wider mb-2 ${selected.resolving_solution ? 'text-green-700' : 'text-amber-700'}">
+                <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${selected.resolving_solution ? 'text-green-700' : 'text-amber-700'}`}>
                   {selected.resolving_solution ? 'Resolving Solution' : 'Resolving Solution — Not Documented'}
                 </p>
-                <p className="text-sm text-gray-800 leading-relaxed">
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
                   {selected.resolving_solution || <em className="text-amber-600">No resolving solution was recorded for this grievance.</em>}
                 </p>
               </div>

@@ -103,7 +103,7 @@ export default function ExternalGrievances({ user }) {
   function initiateClose(g) {
     if (g.status === 'open') {
       setCloseModal(g);
-      setCloseSolution('');
+      setCloseSolution(g.proposed_resolution || '');
       setCloseError('');
     } else {
       // Reopen — no modal needed
@@ -415,17 +415,24 @@ export default function ExternalGrievances({ user }) {
               <p className="text-xs text-gray-400 mt-0.5 font-mono">{closeModal.reference_no}</p>
             </div>
             <div className="px-6 py-5 space-y-4">
+              {closeModal.proposed_resolution && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Proposed Resolution</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{closeModal.proposed_resolution}</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
                   Resolving Solution <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  rows={5}
+                  rows={6}
                   value={closeSolution}
                   onChange={e => { setCloseSolution(e.target.value); setCloseError(''); }}
-                  placeholder="Describe the actions taken to resolve this grievance, the outcome reached, and any agreements made with the complainant..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] resize-none"
+                  placeholder="Describe in full the actions taken to resolve this grievance, the outcome reached, and any agreements made with the complainant..."
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] resize-y"
                 />
+                <p className="text-xs text-gray-400 mt-1">The proposed resolution is pre-filled — expand it into the full final solution.</p>
                 {closeError && <p className="text-xs text-red-600 mt-1">{closeError}</p>}
               </div>
             </div>
@@ -494,7 +501,7 @@ export default function ExternalGrievances({ user }) {
               ].filter(([,v]) => v && v !== '—').map(([label, value]) => (
                 <div key={label} className="grid grid-cols-5 gap-2 py-1.5 border-b border-gray-50 last:border-0">
                   <span className="col-span-2 text-xs font-semibold text-gray-400 uppercase tracking-wide pt-0.5">{label}</span>
-                  <span className="col-span-3 text-sm text-gray-800">{value}</span>
+                  <span className="col-span-3 text-sm text-gray-800 whitespace-pre-wrap break-words">{value}</span>
                 </div>
               ))}
             </div>
