@@ -18,7 +18,7 @@ const COMPONENTS = [
 const COLORS = ['#1a3c5e','#e63946','#2a9d8f','#e9c46a','#f4a261','#264653','#8338ec','#3a86ff','#fb5607','#06d6a0'];
 
 function pctBg(v) {
-  if (v === null || v === undefined || v === '') return 'bg-gray-100 text-gray-400';
+  if (v === null || v === undefined || v === '') return 'bg-slate-50 text-slate-300';
   const n = Number(v);
   if (n >= 100) return 'bg-green-100 text-green-800';
   if (n >= 75)  return 'bg-emerald-100 text-emerald-700';
@@ -41,6 +41,15 @@ function fmtPeriod(p) {
   return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
+function StatCard({ label, value, accent }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-5 py-4">
+      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{label}</p>
+      <p className={`text-3xl font-black ${accent || 'text-slate-800'}`}>{value}</p>
+    </div>
+  );
+}
+
 export default function ConstructionProgress() {
   const [tab, setTab]             = useState('dashboard');
   const [allData, setAllData]     = useState([]);
@@ -48,15 +57,14 @@ export default function ConstructionProgress() {
   const [structure, setStructure] = useState({ projects: [], sections: [], subSections: [], components: [], componentMap: {} });
   const [loading, setLoading]     = useState(true);
 
-  // Dashboard filters
+  // Dashboard filters — no automatic filter; default shows latest cumulative data across all periods
   const [selPeriod,  setSelPeriod]  = useState('');
   const [selProject, setSelProject] = useState('');
-  const [selSection, setSelSection] = useState('');
 
   // Enter Progress state
   const [epPeriod,   setEpPeriod]   = useState('');
   const [epProject,  setEpProject]  = useState('LCCH');
-  const [epGrid,     setEpGrid]     = useState({}); // key: `${sub}||${comp}` → {pct, remarks}
+  const [epGrid,     setEpGrid]     = useState({});
   const [epSaving,   setEpSaving]   = useState(false);
   const [epMsg,      setEpMsg]      = useState('');
 
@@ -77,10 +85,10 @@ export default function ConstructionProgress() {
       setAllData(rAll.data);
       setPeriods(rPeriods.data);
       setStructure(rStruct.data);
-      if (!selPeriod && rPeriods.data.length) setSelPeriod(rPeriods.data[0]);
+      // NOTE: intentionally no auto-selected period — dashboard opens on "All Periods"
     } catch {}
     setLoading(false);
-  }, []); // eslint-disable-line
+  }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -94,23 +102,17 @@ export default function ConstructionProgress() {
     setEpGrid(grid);
   }, [epPeriod, epProject, allData]);
 
-  // Derived data for dashboard
+  // Derived data for dashboard (period + project filters only)
   const dashData = allData.filter(r =>
     (!selPeriod  || r.reporting_period === selPeriod) &&
-    (!selProject || r.project === selProject) &&
-    (!selSection || r.section === selSection)
+    (!selProject || r.project === selProject)
   );
 
-  const dashSections   = [...new Set(dashData.map(r => r.section))].filter(Boolean).sort();
-  const dashSubSections = [...new Set(dashData.map(r => r.sub_section))].filter(Boolean).sort((a,b)=>{
-    const order = ['1A','1B','1C','2','3A','3B','4A','4B','5','6','7','8','9'];
-    return order.indexOf(a) - order.indexOf(b);
-  });
-  const dashComponents = COMPONENTS.map(c => c.name).filter(n => dashData.some(r => r.component === n));
-
-  function getCell(comp, sub) {
-    return dashData.find(r => r.component === comp && r.sub_section === sub);
-  }
+  // Global KPI summary across the filtered set (latest value per project/sub/component when no period)
+  const filledAll  = dashData.filter(r => r.pct_progress !== null);
+  const overallAvg = filledAll.length ? Math.round(filledAll.reduce((s,r)=>s+Number(r.pct_progress),0)/filledAll.length) : 0;
+  const completedCount  = dashData.filter(r => Number(r.pct_progress) >= 100).length;
+  const inProgressCount = dashData.filter(r => Number(r.pct_progress) > 0 && Number(r.pct_progress) < 100).length;
 
   // Trend data — avg per component per period
   const trendPeriods = [...periods].sort();
@@ -123,13 +125,11 @@ export default function ConstructionProgress() {
     return entry;
   });
 
-  // Overall avg per period for summary bar
   const periodSummary = trendPeriods.map(p => {
     const rows = allData.filter(r => r.reporting_period === p && r.pct_progress !== null);
     return { period: fmtPeriod(p), avg: rows.length ? Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length) : 0 };
   });
 
-  // Enter Progress: active sub-sections for selected project
   const epSubSections = structure.subSections.length ? structure.subSections : ['1A','1B','1C','2','3A','3B','4A','4B','5','6','7','8','9'];
 
   async function saveProgress() {
@@ -180,26 +180,26 @@ export default function ConstructionProgress() {
   }
 
   const TABS = [
-    { key: 'dashboard', label: '📊 Dashboard' },
-    { key: 'trend',     label: '📈 Trend' },
-    { key: 'enter',     label: '✏️ Enter Progress' },
-    { key: 'settings',  label: '⚙️ Settings' },
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'trend',     label: 'Trend' },
+    { key: 'enter',     label: 'Enter Progress' },
+    { key: 'settings',  label: 'Settings' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8]">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+        {/* ── Header ── */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-[#1a3c5e]">Construction Progress</h1>
-            <p className="text-sm text-gray-400">LCCH — Monthly reporting dashboard</p>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Construction Progress</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Monthly construction reporting across all projects</p>
           </div>
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <div className="flex gap-1 bg-white border border-slate-200/70 rounded-xl p-1 shadow-sm">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.key ? 'bg-white text-[#1a3c5e] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? 'bg-[#1a3c5e] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                 {t.label}
               </button>
             ))}
@@ -208,22 +208,36 @@ export default function ConstructionProgress() {
 
         {/* ══════ DASHBOARD ══════ */}
         {tab === 'dashboard' && (
-          <div className="space-y-4">
-            {/* Period filter */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-3 flex flex-wrap gap-3 items-center">
+          <div className="space-y-5">
+            {/* Filter bar */}
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filters</span>
+              <select value={selProject} onChange={e => setSelProject(e.target.value)}
+                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-medium text-slate-700">
+                <option value="">All Projects</option>
+                {structure.projects.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
               <select value={selPeriod} onChange={e => setSelPeriod(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-semibold">
-                <option value="">All Periods</option>
+                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-medium text-slate-700">
+                <option value="">All Periods (latest)</option>
                 {periods.map(p => <option key={p} value={p}>{fmtPeriod(p)}</option>)}
               </select>
-              {selPeriod && (
-                <button onClick={() => setSelPeriod('')}
-                  className="text-xs font-semibold text-red-500 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-50">Clear</button>
+              {(selPeriod || selProject) && (
+                <button onClick={() => { setSelPeriod(''); setSelProject(''); }}
+                  className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50">Clear</button>
               )}
-              <span className="ml-auto text-xs text-gray-400">{dashData.length} activities across {structure.projects.length} projects</span>
+              <span className="ml-auto text-xs text-slate-400">{dashData.length} activities · {structure.projects.length} projects</span>
             </div>
 
-            {loading && <div className="text-center py-16 text-gray-400">Loading…</div>}
+            {/* KPI summary */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Overall Progress"   value={`${overallAvg}%`}     accent="text-[#1a3c5e]" />
+              <StatCard label="Activities Tracked" value={dashData.length}      accent="text-slate-800" />
+              <StatCard label="Completed"          value={completedCount}       accent="text-green-600" />
+              <StatCard label="In Progress"        value={inProgressCount}      accent="text-blue-600" />
+            </div>
+
+            {loading && <div className="text-center py-16 text-slate-400">Loading…</div>}
 
             {/* One matrix per project */}
             {structure.projects.map(project => {
@@ -234,41 +248,42 @@ export default function ConstructionProgress() {
               const projComponents  = COMPONENTS.map(c => c.name).filter(n => projData.some(r => r.component === n));
               const projSections    = [...new Set(projData.map(r => r.section))].filter(Boolean).sort();
 
-              const overall = projData.filter(r => r.pct_progress !== null);
-              const overallAvg = overall.length ? Math.round(overall.reduce((s,r) => s + Number(r.pct_progress), 0) / overall.length) : 0;
+              const filled = projData.filter(r => r.pct_progress !== null);
+              const projAvg = filled.length ? Math.round(filled.reduce((s,r) => s + Number(r.pct_progress), 0) / filled.length) : 0;
 
               function getCell(comp, sub) {
-                // If multiple periods, take latest
                 const matches = projData.filter(r => r.component === comp && r.sub_section === sub);
                 if (!matches.length) return null;
                 return matches.sort((a,b) => (b.reporting_period||'') > (a.reporting_period||'') ? 1 : -1)[0];
               }
 
               return (
-                <div key={project} className="space-y-3">
-                  {/* Project header */}
-                  <div className="flex items-center gap-4">
-                    <div className="h-px flex-1 bg-gray-200" />
-                    <div className="flex items-center gap-3 px-4 py-2 bg-[#1a3c5e] rounded-xl">
-                      <span className="text-white font-black text-sm tracking-wide">{project}</span>
-                      <span className={`text-sm font-black ${overallAvg>=80?'text-green-300':overallAvg>=50?'text-blue-300':'text-amber-300'}`}>{overallAvg}% overall</span>
+                <div key={project} className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+                  {/* Project header strip */}
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-[#1a3c5e] to-[#28527a]">
+                    <div className="flex items-center gap-3">
+                      <span className="text-white font-black text-base tracking-wide">{project}</span>
+                      <span className="text-xs text-blue-100/80 font-medium">{projSections.length} sections · {projSubSections.length} sub-sections</span>
                     </div>
-                    <div className="h-px flex-1 bg-gray-200" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-blue-100/70">Overall</span>
+                      <span className="text-lg font-black text-white">{projAvg}%</span>
+                    </div>
                   </div>
 
                   {/* Section progress bars */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                  <div className="px-5 py-4 border-b border-slate-100">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-5 gap-y-3">
                       {projSections.map(sec => {
                         const secRows = projData.filter(r => r.section === sec && r.pct_progress !== null);
                         const avg = secRows.length ? Math.round(secRows.reduce((s,r)=>s+Number(r.pct_progress),0)/secRows.length) : 0;
                         return (
                           <div key={sec}>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-xs font-bold text-gray-700 truncate">{sec}</span>
+                            <div className="flex justify-between mb-1.5">
+                              <span className="text-xs font-bold text-slate-600 truncate">{sec}</span>
                               <span className={`text-xs font-black ml-1 ${avg>=80?'text-green-600':avg>=50?'text-blue-600':'text-amber-600'}`}>{avg}%</span>
                             </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full ${pctBar(avg)}`} style={{width:`${avg}%`}} />
                             </div>
                           </div>
@@ -278,60 +293,60 @@ export default function ConstructionProgress() {
                   </div>
 
                   {/* Progress matrix */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-[#1a3c5e] text-white">
-                            <th className="px-4 py-3 text-left text-xs font-bold sticky left-0 bg-[#1a3c5e] min-w-[220px]">Component</th>
-                            {projSubSections.map(sub => (
-                              <th key={sub} className="px-2 py-3 text-center text-xs font-bold min-w-[80px] whitespace-nowrap">{sub}</th>
-                            ))}
-                            <th className="px-2 py-3 text-center text-xs font-bold min-w-[70px] bg-[#122d47]">Avg</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {projComponents.map((comp, ci) => {
-                            const cells = projSubSections.map(sub => getCell(comp, sub));
-                            const filled = cells.filter(c => c && c.pct_progress !== null);
-                            const avg = filled.length ? Math.round(filled.reduce((s,c)=>s+Number(c.pct_progress),0)/filled.length) : null;
-                            return (
-                              <tr key={comp} className={ci%2===0?'bg-white':'bg-gray-50/40'}>
-                                <td className="px-4 py-2.5 sticky left-0 bg-inherit border-r border-gray-100 text-xs font-semibold text-gray-800">{comp}</td>
-                                {projSubSections.map(sub => {
-                                  const cell = getCell(comp, sub);
-                                  const pct = cell?.pct_progress;
-                                  return (
-                                    <td key={sub} className="px-1 py-1.5 text-center">
-                                      {pct === null || pct === undefined
-                                        ? <span className="text-gray-200 text-xs">—</span>
-                                        : <div className={`mx-1 py-1.5 rounded-lg text-xs font-black ${pctBg(pct)}`}>{Number(pct)}%</div>
-                                      }
-                                    </td>
-                                  );
-                                })}
-                                <td className="px-1 py-1.5 text-center bg-gray-50">
-                                  {avg !== null && <div className={`mx-1 py-1.5 rounded-lg text-xs font-black ${pctBg(avg)}`}>{avg}%</div>}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="px-5 py-2.5 border-t border-gray-100 flex flex-wrap gap-3">
-                      {[['≥100%','bg-green-100 text-green-800'],['≥75%','bg-emerald-100 text-emerald-700'],['≥50%','bg-blue-100 text-blue-700'],['≥25%','bg-amber-100 text-amber-700'],['<25%','bg-red-100 text-red-700']].map(([l,c])=>(
-                        <div key={l} className={`px-2 py-0.5 rounded text-xs font-bold ${c}`}>{l}</div>
-                      ))}
-                    </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50 min-w-[220px]">Component</th>
+                          {projSubSections.map(sub => (
+                            <th key={sub} className="px-2 py-3 text-center text-[11px] font-bold text-slate-500 uppercase min-w-[78px] whitespace-nowrap">{sub}</th>
+                          ))}
+                          <th className="px-2 py-3 text-center text-[11px] font-bold text-slate-600 uppercase min-w-[70px] bg-slate-100">Avg</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projComponents.map((comp, ci) => {
+                          const cells = projSubSections.map(sub => getCell(comp, sub));
+                          const filledC = cells.filter(c => c && c.pct_progress !== null);
+                          const avg = filledC.length ? Math.round(filledC.reduce((s,c)=>s+Number(c.pct_progress),0)/filledC.length) : null;
+                          return (
+                            <tr key={comp} className={`border-b border-slate-50 ${ci%2===0?'bg-white':'bg-slate-50/40'} hover:bg-blue-50/30 transition-colors`}>
+                              <td className="px-4 py-2.5 sticky left-0 bg-inherit border-r border-slate-100 text-xs font-semibold text-slate-700">{comp}</td>
+                              {projSubSections.map(sub => {
+                                const cell = getCell(comp, sub);
+                                const pct = cell?.pct_progress;
+                                return (
+                                  <td key={sub} className="px-1 py-1.5 text-center">
+                                    {pct === null || pct === undefined
+                                      ? <span className="text-slate-200 text-xs">—</span>
+                                      : <div className={`mx-1 py-1.5 rounded-lg text-xs font-black ${pctBg(pct)}`}>{Number(pct)}%</div>
+                                    }
+                                  </td>
+                                );
+                              })}
+                              <td className="px-1 py-1.5 text-center bg-slate-50/60">
+                                {avg !== null && <div className={`mx-1 py-1.5 rounded-lg text-xs font-black ${pctBg(avg)}`}>{avg}%</div>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Legend */}
+                  <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Legend</span>
+                    {[['100%','bg-green-100 text-green-800'],['75–99%','bg-emerald-100 text-emerald-700'],['50–74%','bg-blue-100 text-blue-700'],['25–49%','bg-amber-100 text-amber-700'],['<25%','bg-red-100 text-red-700']].map(([l,c])=>(
+                      <div key={l} className={`px-2 py-0.5 rounded text-[11px] font-bold ${c}`}>{l}</div>
+                    ))}
                   </div>
                 </div>
               );
             })}
 
             {!loading && dashData.length === 0 && (
-              <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
-                No data for selected period. Use <strong>Enter Progress</strong> to add monthly data.
+              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-200/70">
+                No data for the selected filters. Use <strong>Enter Progress</strong> to add monthly data.
               </div>
             )}
           </div>
@@ -339,10 +354,9 @@ export default function ConstructionProgress() {
 
         {/* ══════ TREND ══════ */}
         {tab === 'trend' && (
-          <div className="space-y-4">
-            {/* Period summary */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={periodSummary} barSize={40}>
                   <XAxis dataKey="period" tick={{fontSize:11}} />
@@ -353,9 +367,8 @@ export default function ConstructionProgress() {
               </ResponsiveContainer>
             </div>
 
-            {/* Component trend lines */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
               <ResponsiveContainer width="100%" height={380}>
                 <LineChart data={trendData} margin={{left:10,right:20,top:5,bottom:5}}>
                   <XAxis dataKey="period" tick={{fontSize:11}} />
@@ -370,29 +383,28 @@ export default function ConstructionProgress() {
               </ResponsiveContainer>
             </div>
 
-            {/* Section trend table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-slate-100">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm border-collapse">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Section</th>
-                      {trendPeriods.map(p => <th key={p} className="px-4 py-3 text-center text-xs font-bold text-gray-400 uppercase whitespace-nowrap">{fmtPeriod(p)}</th>)}
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">Section</th>
+                      {trendPeriods.map(p => <th key={p} className="px-4 py-3 text-center text-[11px] font-bold text-slate-500 uppercase whitespace-nowrap">{fmtPeriod(p)}</th>)}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-slate-50">
                     {structure.sections.map(sec => (
-                      <tr key={sec} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-bold text-[#1a3c5e]">{sec}</td>
+                      <tr key={sec} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-bold text-slate-700">{sec}</td>
                         {trendPeriods.map(p => {
                           const rows = allData.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
                           const avg = rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : null;
                           return (
                             <td key={p} className="px-4 py-3 text-center">
-                              {avg === null ? <span className="text-gray-300">—</span> : (
+                              {avg === null ? <span className="text-slate-300">—</span> : (
                                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-black ${pctBg(avg)}`}>{avg}%</span>
                               )}
                             </td>
@@ -409,43 +421,43 @@ export default function ConstructionProgress() {
 
         {/* ══════ ENTER PROGRESS ══════ */}
         {tab === 'enter' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Monthly Data Entry</p>
-              <div className="flex flex-wrap gap-3 items-end">
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Monthly Data Entry</p>
+              <div className="flex flex-wrap gap-4 items-end">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Reporting Period *</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Reporting Period *</label>
                   <input type="month" value={epPeriod ? epPeriod.slice(0,7) : ''}
                     onChange={e => setEpPeriod(e.target.value ? e.target.value + '-01' : '')}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Project</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Project</label>
                   <select value={epProject} onChange={e => setEpProject(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white">
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white">
                     {(structure.projects.length ? structure.projects : ['LCCH']).map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-                <div className="text-xs text-gray-400 self-end pb-2">Enter % progress (0–100) for each component × sub-section</div>
+                <div className="text-xs text-slate-400 self-end pb-2">Enter % progress (0–100) for each component × sub-section</div>
               </div>
             </div>
 
             {epPeriod && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm border-collapse">
                     <thead>
-                      <tr className="bg-[#1a3c5e] text-white">
-                        <th className="px-4 py-3 text-left text-xs font-bold sticky left-0 bg-[#1a3c5e] min-w-[220px]">Component</th>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase sticky left-0 bg-slate-50 min-w-[220px]">Component</th>
                         {epSubSections.map(sub => (
-                          <th key={sub} className="px-2 py-3 text-center text-xs font-bold min-w-[72px]">{sub}</th>
+                          <th key={sub} className="px-2 py-3 text-center text-[11px] font-bold text-slate-500 uppercase min-w-[72px]">{sub}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {COMPONENTS.map(({ name }, ci) => (
-                        <tr key={name} className={ci%2===0?'bg-white':'bg-gray-50/50'}>
-                          <td className="px-4 py-2 sticky left-0 bg-inherit border-r border-gray-100 text-xs font-semibold text-gray-700">{name}</td>
+                        <tr key={name} className={`border-b border-slate-50 ${ci%2===0?'bg-white':'bg-slate-50/40'}`}>
+                          <td className="px-4 py-2 sticky left-0 bg-inherit border-r border-slate-100 text-xs font-semibold text-slate-700">{name}</td>
                           {epSubSections.map(sub => {
                             const k = `${sub}||${name}`;
                             const val = epGrid[k] || { pct: '', remarks: '' };
@@ -457,7 +469,7 @@ export default function ConstructionProgress() {
                                   value={pct === null || pct === undefined ? '' : pct}
                                   onChange={e => setEpGrid(g => ({...g, [k]: {...(g[k]||{}), pct: e.target.value === '' ? '' : Number(e.target.value)}}))}
                                   placeholder="—"
-                                  className={`w-14 text-center text-xs font-bold py-1.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-[#1a3c5e] ${pct !== '' && pct !== null && pct !== undefined ? pctBg(pct) + ' border-transparent' : 'border-gray-200 text-gray-400'}`}
+                                  className={`w-14 text-center text-xs font-bold py-1.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-[#1a3c5e] ${pct !== '' && pct !== null && pct !== undefined ? pctBg(pct) + ' border-transparent' : 'border-slate-200 text-slate-400'}`}
                                 />
                               </td>
                             );
@@ -467,7 +479,7 @@ export default function ConstructionProgress() {
                     </tbody>
                   </table>
                 </div>
-                <div className="px-5 py-4 border-t border-gray-100 flex items-center gap-4">
+                <div className="px-5 py-4 border-t border-slate-100 flex items-center gap-4">
                   <button onClick={saveProgress} disabled={epSaving}
                     className="px-6 py-2.5 bg-[#1a3c5e] text-white font-bold rounded-xl hover:bg-[#122d47] disabled:opacity-50 transition-colors">
                     {epSaving ? 'Saving…' : '✓ Save Progress Report'}
@@ -478,7 +490,7 @@ export default function ConstructionProgress() {
             )}
 
             {!epPeriod && (
-              <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+              <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-200/70">
                 Select a reporting period above to start entering data.
               </div>
             )}
@@ -487,45 +499,43 @@ export default function ConstructionProgress() {
 
         {/* ══════ SETTINGS ══════ */}
         {tab === 'settings' && (
-          <div className="space-y-4">
-            {/* Ideas panel */}
-            <div className="bg-gradient-to-br from-[#1a3c5e] to-[#2a5c8e] rounded-2xl p-5 text-white">
-              <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-3">💡 Ideas to make this more efficient</p>
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-[#1a3c5e] to-[#28527a] rounded-2xl p-5 text-white shadow-sm">
+              <p className="text-[11px] font-bold uppercase tracking-widest opacity-70 mb-3">Ideas to make this more efficient</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {[
-                  ['📎 Excel Upload', 'Drop a monthly report file → auto-imports all data without running scripts'],
-                  ['🎯 Target vs Actual', 'Add a planned % per activity per month to compare against real progress'],
-                  ['🔴 Delay Alerts', 'Flag activities where actual progress is more than 10% below target'],
-                  ['📧 PM Submission Reminders', 'Email Placide automatically on the 1st of each month to fill in progress'],
-                  ['📄 PDF Report Export', 'One-click export of the progress matrix as a PDF report for EBID-ECOWAS'],
-                  ['📐 S-Curve', 'Plot cumulative planned vs actual progress over the project lifetime'],
+                  ['Excel Upload', 'Drop a monthly report file → auto-imports all data without running scripts'],
+                  ['Target vs Actual', 'Add a planned % per activity per month to compare against real progress'],
+                  ['Delay Alerts', 'Flag activities where actual progress is more than 10% below target'],
+                  ['PM Submission Reminders', 'Email Placide automatically on the 1st of each month to fill in progress'],
+                  ['PDF Report Export', 'One-click export of the progress matrix as a PDF report for EBID-ECOWAS'],
+                  ['S-Curve', 'Plot cumulative planned vs actual progress over the project lifetime'],
                 ].map(([title, desc]) => (
-                  <div key={title} className="bg-white/10 rounded-xl p-3">
+                  <div key={title} className="bg-white/10 rounded-xl p-3.5">
                     <p className="font-bold text-sm">{title}</p>
-                    <p className="text-xs opacity-80 mt-1">{desc}</p>
+                    <p className="text-xs opacity-80 mt-1 leading-relaxed">{desc}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Add sub-section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Add New Sub-Section</p>
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Add New Sub-Section</p>
               <div className="flex flex-wrap gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Project</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Project</label>
                   <input value={newProject} onChange={e => setNewProject(e.target.value)} placeholder="LCCH"
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-32 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-32 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Section</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Section</label>
                   <input value={newSection} onChange={e => setNewSection(e.target.value)} placeholder="SECTION 10"
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-36 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Section</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Sub-Section</label>
                   <input value={newSubSection} onChange={e => setNewSubSection(e.target.value)} placeholder="10A"
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-28 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-28 focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
                 </div>
                 <button onClick={addSubSection}
                   className="px-4 py-2 bg-[#1a3c5e] text-white text-sm font-bold rounded-lg hover:bg-[#122d47] transition-colors">
@@ -535,20 +545,19 @@ export default function ConstructionProgress() {
               {settingMsg && <p className={`mt-3 text-sm font-semibold ${settingMsg.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>{settingMsg}</p>}
             </div>
 
-            {/* Current structure */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Current Structure</p>
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Current Structure</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-2">Projects</p>
-                  {structure.projects.map(p => <div key={p} className="text-sm text-gray-600 py-1 border-b border-gray-50">{p}</div>)}
+                  <p className="text-sm font-bold text-slate-700 mb-2">Projects</p>
+                  {structure.projects.map(p => <div key={p} className="text-sm text-slate-600 py-1 border-b border-slate-50">{p}</div>)}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-2">Sections</p>
-                  {structure.sections.map(s => <div key={s} className="text-sm text-gray-600 py-1 border-b border-gray-50">{s}</div>)}
+                  <p className="text-sm font-bold text-slate-700 mb-2">Sections</p>
+                  {structure.sections.map(s => <div key={s} className="text-sm text-slate-600 py-1 border-b border-slate-50">{s}</div>)}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-2">Sub-Sections</p>
+                  <p className="text-sm font-bold text-slate-700 mb-2">Sub-Sections</p>
                   <div className="flex flex-wrap gap-2">
                     {structure.subSections.map(s => (
                       <span key={s} className="px-2 py-1 bg-[#1a3c5e] text-white text-xs font-bold rounded-lg">{s}</span>
