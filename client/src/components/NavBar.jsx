@@ -53,6 +53,75 @@ function DropdownMenu({ label, items, basePath }) {
   );
 }
 
+const OWNER = 'rudy.choufani@skykapital.com';
+
+function ProfileMenu({ user, initials, roleLabel, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const navigate = useNavigate();
+  const isOwner = user?.username === OWNER;
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  function go(path) { setOpen(false); navigate(path); }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-xl hover:bg-white/10 transition-colors">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FFD700] to-[#e6b800] flex items-center justify-center shadow-sm ring-1 ring-white/20">
+          <span className="text-[#1a3c5e] text-xs font-black">{initials}</span>
+        </div>
+        <div className="hidden sm:block text-right">
+          <div className="text-white text-xs font-semibold leading-tight truncate max-w-[160px]">{user?.username}</div>
+          <div className="text-blue-300/90 text-[10px] leading-tight">{roleLabel}</div>
+        </div>
+        <svg className={`hidden sm:block w-3.5 h-3.5 text-blue-200 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 z-50 min-w-[220px] py-1.5 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100 mb-1">
+            <p className="text-sm font-bold text-gray-800 truncate">{user?.username}</p>
+            <p className="text-xs text-gray-400">{roleLabel}</p>
+          </div>
+          <button onClick={() => go('/settings')}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#1a3c5e] transition-colors">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Settings
+          </button>
+          {isOwner && (
+            <button onClick={() => go('/user-access')}
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#1a3c5e] transition-colors">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              User Access
+            </button>
+          )}
+          <div className="border-t border-gray-100 my-1" />
+          <button onClick={() => { setOpen(false); onLogout(); }}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function NavBar({ user, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,6 +147,7 @@ export default function NavBar({ user, onLogout }) {
   );
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
+  const roleLabel = user?.role === 'admin' ? 'Administrator' : user?.role === 'submitter' ? 'Grievance Submitter' : 'Viewer';
 
   return (
     <nav className="bg-gradient-to-r from-[#15304c] via-[#1a3c5e] to-[#15304c] shadow-lg sticky top-0 z-40 border-b-2 border-[#FFD700]/70">
@@ -128,29 +198,8 @@ export default function NavBar({ user, onLogout }) {
             </div>
           </div>
 
-          {/* User + logout */}
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FFD700] to-[#e6b800] flex items-center justify-center shadow-sm ring-1 ring-white/20">
-                <span className="text-[#1a3c5e] text-xs font-black">{initials}</span>
-              </div>
-              <div className="text-right">
-                <div className="text-white text-xs font-semibold leading-tight truncate max-w-[160px]">{user?.username}</div>
-                <div className="text-blue-300/90 text-[10px] leading-tight capitalize">
-                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'submitter' ? 'Grievance Submitter' : 'Viewer'}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-lg transition-all duration-150 border border-white/10 hover:border-white/20"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Logout
-            </button>
-          </div>
+          {/* Profile dropdown */}
+          <ProfileMenu user={user} initials={initials} roleLabel={roleLabel} onLogout={handleLogout} />
         </div>
       </div>
     </nav>

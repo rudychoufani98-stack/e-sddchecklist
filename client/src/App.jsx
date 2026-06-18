@@ -10,6 +10,8 @@ import ExternalGrievances from './pages/grv/ExternalGrievances';
 import SubmitGrievance from './pages/grv/SubmitGrievance';
 import GrvSettings from './pages/grv/GrvSettings';
 import ResolvingSolutions from './pages/grv/ResolvingSolutions';
+import Settings from './pages/Settings';
+import UserAccess from './pages/UserAccess';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -45,6 +47,7 @@ export default function App() {
               <>
                 <Route path="/grv/submit"     element={<SubmitGrievance />} />
                 <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
+                <Route path="/settings"       element={<Settings user={user} />} />
                 <Route path="*"               element={<Navigate to="/grv/grievances" />} />
               </>
             ) : (
@@ -58,6 +61,8 @@ export default function App() {
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />
                 <Route path="/grv/settings"          element={<GrvSettings user={user} />} />
                 <Route path="/grv/resolving-solutions" element={<ResolvingSolutions user={user} />} />
+                <Route path="/settings"              element={<Settings user={user} />} />
+                <Route path="/user-access"           element={<UserAccess user={user} />} />
                 <Route path="/login"           element={<Navigate to="/" />} />
                 <Route path="*"               element={<Navigate to="/" />} />
               </>

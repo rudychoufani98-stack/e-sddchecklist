@@ -26,8 +26,9 @@ const USERS = [
 ];
 
 async function seedIfNeeded() {
-  // Always upsert users so login always works
-  await supabase.from('users').upsert(USERS, { onConflict: 'username' });
+  // Insert seed users only if missing — never overwrite existing rows,
+  // so password/role changes made via User Access are preserved across restarts.
+  await supabase.from('users').upsert(USERS, { onConflict: 'username', ignoreDuplicates: true });
 
   const { data: existing } = await supabase.from('sections').select('id').limit(1);
   if (existing && existing.length > 0) return;
