@@ -10,6 +10,7 @@ import ExternalGrievances from './pages/grv/ExternalGrievances';
 import SubmitGrievance from './pages/grv/SubmitGrievance';
 import GrvSettings from './pages/grv/GrvSettings';
 import ResolvingSolutions from './pages/grv/ResolvingSolutions';
+import EsgCalendar from './pages/EsgCalendar';
 import Settings from './pages/Settings';
 import UserAccess from './pages/UserAccess';
 import NavBar from './components/NavBar';
@@ -56,6 +57,7 @@ export default function App() {
                 <Route path="/sections/:id"    element={<SectionDetail user={user} />} />
                 <Route path="/data-room"       element={<DataRoom user={user} />} />
                 <Route path="/timeline"              element={<Timeline />} />
+                <Route path="/esg-calendar"          element={<EsgCalendar user={user} />} />
                 <Route path="/construction"         element={<ConstructionProgress />} />
                 <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />

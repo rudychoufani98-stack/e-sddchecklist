@@ -41,6 +41,7 @@ app.use('/api/grievances',    require('../server/routes/grievances'));
 app.use('/api/grv-projects', require('../server/routes/grv-projects'));
 app.use('/api/construction', require('../server/routes/construction'));
 app.use('/api/users',        require('../server/routes/users'));
+app.use('/api/esg-calendar', require('../server/routes/esg-calendar'));
 
 // Serve React build
 const buildDir = path.join(__dirname, '../client/build');

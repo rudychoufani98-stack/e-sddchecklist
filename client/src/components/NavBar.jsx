@@ -178,9 +178,10 @@ export default function NavBar({ user, onLogout }) {
                   <DropdownMenu
                     label="ESG Tracker"
                     items={[
-                      { path: '/',          label: 'Dashboard' },
-                      { path: '/timeline',  label: 'Timeline' },
-                      { path: '/data-room', label: 'Data Room' },
+                      { path: '/',             label: 'Dashboard' },
+                      { path: '/esg-calendar', label: 'ESG Calendar' },
+                      { path: '/timeline',     label: 'Timeline' },
+                      { path: '/data-room',    label: 'Data Room' },
                     ]}
                   />
                   <DropdownMenu
