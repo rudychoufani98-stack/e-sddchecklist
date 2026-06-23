@@ -44,7 +44,13 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            {user.role === 'auditor' ? (
+            {user.role === 'construction' ? (
+              <>
+                <Route path="/construction" element={<ConstructionProgress />} />
+                <Route path="/settings"     element={<Settings user={user} />} />
+                <Route path="*"             element={<Navigate to="/construction" />} />
+              </>
+            ) : user.role === 'auditor' ? (
               <>
                 <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
                 <Route path="/settings"       element={<Settings user={user} />} />

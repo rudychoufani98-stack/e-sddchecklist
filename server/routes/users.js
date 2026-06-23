@@ -44,7 +44,7 @@ router.post('/change-password', async (req, res) => {
 // ===== Owner-only user management below =====
 router.use(requireOwner);
 
-const ROLES = ['admin', 'viewer', 'submitter', 'auditor'];
+const ROLES = ['admin', 'viewer', 'submitter', 'auditor', 'construction'];
 
 // GET all users (no password hashes)
 router.get('/', async (req, res) => {
@@ -72,6 +72,7 @@ router.post('/', async (req, res) => {
     if (role === 'auditor' && !scope_project_id)
       return res.status(400).json({ error: 'Auditor accounts must be assigned to a project.' });
     if (role !== 'auditor') { scope_project_id = null; scope_sub_section_id = null; }
+    if (role === 'construction') { scope_project_id = null; scope_sub_section_id = null; }
 
     const { data: existing } = await supabase.from('users').select('username').eq('username', username).single();
     if (existing) return res.status(409).json({ error: 'A user with that username already exists.' });

@@ -3,10 +3,16 @@ const supabase = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const router = express.Router();
 
-router.use(requireAuth, requireAdmin);
+function requireAdminOrConstruction(req, res, next) {
+  if (req.user?.role === 'admin' || req.user?.role === 'construction') return next();
+  return res.status(403).json({ error: 'Forbidden' });
+}
+
+// Read access for both admin and construction roles; write operations keep requireAdmin
+router.use(requireAuth);
 
 // GET all rows with optional filters
-router.get('/', async (req, res) => {
+router.get('/', requireAdminOrConstruction, async (req, res) => {
   try {
     const { project, section, reporting_period } = req.query;
     let q = supabase.from('construction_progress').select('*')
@@ -25,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET distinct periods
-router.get('/periods', async (req, res) => {
+router.get('/periods', requireAdminOrConstruction, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('construction_progress')
@@ -40,7 +46,7 @@ router.get('/periods', async (req, res) => {
 });
 
 // GET structure: projects, sections, sub_sections, components
-router.get('/structure', async (req, res) => {
+router.get('/structure', requireAdminOrConstruction, async (req, res) => {
   try {
     const { data, error } = await supabase.from('construction_progress').select('project,section,sub_section,component,key_activities');
     if (error) throw error;
@@ -58,7 +64,7 @@ router.get('/structure', async (req, res) => {
 });
 
 // POST bulk upsert for a period (Enter Progress form)
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', requireAdmin, async (req, res) => {
   try {
     const { reporting_period, project, entries } = req.body;
     if (!reporting_period || !project || !Array.isArray(entries))
@@ -103,7 +109,7 @@ router.post('/bulk', async (req, res) => {
 });
 
 // POST add new sub-section (Settings)
-router.post('/sub-sections', async (req, res) => {
+router.post('/sub-sections', requireAdmin, async (req, res) => {
   try {
     const { project, section, sub_section } = req.body;
     if (!project || !section || !sub_section)
@@ -126,7 +132,7 @@ router.post('/sub-sections', async (req, res) => {
   }
 });
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAdmin, async (req, res) => {
   try {
     const { pct_progress, status, remarks } = req.body;
     const payload = { updated_at: new Date().toISOString() };

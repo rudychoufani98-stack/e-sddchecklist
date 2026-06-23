@@ -254,6 +254,7 @@ export default function NavBar({ user, onLogout }) {
   const roleLabel = user?.role === 'admin' ? 'Administrator'
     : user?.role === 'submitter' ? 'Grievance Submitter'
     : user?.role === 'auditor' ? 'Auditor (Lender)'
+    : user?.role === 'construction' ? 'Construction Progress'
     : 'Viewer';
 
   return (
@@ -275,7 +276,9 @@ export default function NavBar({ user, onLogout }) {
             <div className="hidden sm:block w-px h-8 bg-white/15" />
 
             <div className="hidden sm:flex items-center gap-1">
-              {user?.role === 'auditor' ? (
+              {user?.role === 'construction' ? (
+                navLink('/construction', 'Construction Progress')
+              ) : user?.role === 'auditor' ? (
                 navLink('/grv/grievances', 'Grievances Dashboard')
               ) : user?.role === 'submitter' ? (
                 <>

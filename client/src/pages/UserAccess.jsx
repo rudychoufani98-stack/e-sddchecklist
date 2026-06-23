@@ -4,16 +4,18 @@ import api from '../api';
 
 const OWNER = 'rudy.choufani@skykapital.com';
 const ROLES = [
-  { value: 'admin',     label: 'Administrator' },
-  { value: 'viewer',    label: 'Viewer' },
-  { value: 'submitter', label: 'Grievance Submitter' },
-  { value: 'auditor',   label: 'Auditor (Lender)' },
+  { value: 'admin',        label: 'Administrator' },
+  { value: 'viewer',       label: 'Viewer' },
+  { value: 'submitter',    label: 'Grievance Submitter' },
+  { value: 'auditor',      label: 'Auditor (Lender)' },
+  { value: 'construction', label: 'Construction Progress' },
 ];
 const roleBadge = {
-  admin:     'bg-[#1a3c5e] text-white',
-  viewer:    'bg-blue-100 text-blue-700',
-  submitter: 'bg-amber-100 text-amber-700',
-  auditor:   'bg-purple-100 text-purple-700',
+  admin:        'bg-[#1a3c5e] text-white',
+  viewer:       'bg-blue-100 text-blue-700',
+  submitter:    'bg-amber-100 text-amber-700',
+  auditor:      'bg-purple-100 text-purple-700',
+  construction: 'bg-green-100 text-green-700',
 };
 
 export default function UserAccess({ user }) {
@@ -171,6 +173,11 @@ export default function UserAccess({ user }) {
         {nu.role === 'auditor' && (
           <p className="mt-3 text-xs text-purple-600 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
             🔒 Auditor accounts (for lenders) see <strong>only the Grievances dashboard</strong>, read-only, restricted to the selected project{nu.scope_sub_section_id ? ' / sub-section' : ''}.
+          </p>
+        )}
+        {nu.role === 'construction' && (
+          <p className="mt-3 text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+            🏗️ Construction accounts see <strong>only the Construction Progress tab</strong>, read-only.
           </p>
         )}
       </div>

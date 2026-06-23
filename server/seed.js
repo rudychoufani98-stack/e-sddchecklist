@@ -19,7 +19,9 @@ const commonDeliverables = [
 const docTypes = ['AWARD LETTER','BEME','CONTRACT','DESIGN FILE','KMZ'];
 
 const USERS = [
-  { username: 'rudy.choufani@skykapital.com', password_hash: '$2a$10$mcYxMyjOfltIciGHMXkF/OTeX3uGoABk2LVWTqCjd53BoAkBVq6qC', role: 'admin' },
+  { username: 'rudy.choufani@skykapital.com',  password_hash: '$2a$10$mcYxMyjOfltIciGHMXkF/OTeX3uGoABk2LVWTqCjd53BoAkBVq6qC', role: 'admin' },
+  { username: 'joseph.mouzaya@hitech-company.com', password_hash: '$2a$10$c8KADt8u94hKbv3kaol/bOpeS/tTR525hPBtrZh2wgkT5Ivas.UGK', role: 'construction' },
+  { username: 'raj.dubey@hitech-company.com',      password_hash: '$2a$10$PYqfpRe1x7ZlvzTJAPx/VOKT1DRvPA3h6OnQr1/0FI0lsYQZ8VtEe', role: 'construction' },
 ];
 
 async function seedIfNeeded() {
