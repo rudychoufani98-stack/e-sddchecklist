@@ -49,12 +49,24 @@ router.post('/login', loginRateLimit, async (req, res) => {
   }
 
   const token = jwt.sign(
-    { username: user.username, role: user.role },
+    {
+      username: user.username,
+      role: user.role,
+      // Auditor (lender) accounts are locked to one project / sub-section
+      scope_project_id: user.scope_project_id ?? null,
+      scope_sub_section_id: user.scope_sub_section_id ?? null,
+    },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
 
-  res.json({ token, username: user.username, role: user.role });
+  res.json({
+    token,
+    username: user.username,
+    role: user.role,
+    scope_project_id: user.scope_project_id ?? null,
+    scope_sub_section_id: user.scope_sub_section_id ?? null,
+  });
 });
 
 module.exports = router;

@@ -7,20 +7,23 @@ const ROLES = [
   { value: 'admin',     label: 'Administrator' },
   { value: 'viewer',    label: 'Viewer' },
   { value: 'submitter', label: 'Grievance Submitter' },
+  { value: 'auditor',   label: 'Auditor (Lender)' },
 ];
 const roleBadge = {
   admin:     'bg-[#1a3c5e] text-white',
   viewer:    'bg-blue-100 text-blue-700',
   submitter: 'bg-amber-100 text-amber-700',
+  auditor:   'bg-purple-100 text-purple-700',
 };
 
 export default function UserAccess({ user }) {
   const [users, setUsers] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState(null);
 
   // New user form
-  const [nu, setNu] = useState({ username: '', password: '', role: 'viewer' });
+  const [nu, setNu] = useState({ username: '', password: '', role: 'viewer', scope_project_id: '', scope_sub_section_id: '' });
   const [creating, setCreating] = useState(false);
 
   // Reset-password modal
@@ -30,10 +33,20 @@ export default function UserAccess({ user }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const res = await api.get('/users'); setUsers(res.data); } catch {}
+    try {
+      const [uRes, pRes] = await Promise.all([api.get('/users'), api.get('/grv-projects')]);
+      setUsers(uRes.data);
+      setProjects(pRes.data);
+    } catch {}
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  function projName(id) { return projects.find(p => p.id === id)?.name || ''; }
+  function subName(pid, sid) {
+    const p = projects.find(x => x.id === pid);
+    return (p?.grv_sub_sections || []).find(s => s.id === sid)?.name || '';
+  }
 
   // Guard: only owner
   if (user && user.username !== OWNER) return <Navigate to="/" />;
@@ -42,19 +55,39 @@ export default function UserAccess({ user }) {
 
   async function createUser(e) {
     e.preventDefault();
+    if (nu.role === 'auditor' && !nu.scope_project_id) { flash('error', 'Select a project for the auditor.'); return; }
     setCreating(true);
     try {
-      await api.post('/users', nu);
+      const payload = {
+        username: nu.username, password: nu.password, role: nu.role,
+        scope_project_id: nu.role === 'auditor' ? Number(nu.scope_project_id) : null,
+        scope_sub_section_id: nu.role === 'auditor' && nu.scope_sub_section_id ? Number(nu.scope_sub_section_id) : null,
+      };
+      await api.post('/users', payload);
       flash('success', `User "${nu.username.toLowerCase()}" created.`);
-      setNu({ username: '', password: '', role: 'viewer' });
+      setNu({ username: '', password: '', role: 'viewer', scope_project_id: '', scope_sub_section_id: '' });
       load();
     } catch (err) { flash('error', err.response?.data?.error || 'Could not create user.'); }
     setCreating(false);
   }
 
   async function changeRole(u, role) {
-    try { await api.patch(`/users/${encodeURIComponent(u.username)}`, { role }); load(); }
-    catch (err) { flash('error', err.response?.data?.error || 'Could not update role.'); }
+    try {
+      const body = { role };
+      // Auditor needs a scope — default to the first project if none set yet
+      if (role === 'auditor') body.scope_project_id = u.scope_project_id || projects[0]?.id;
+      await api.patch(`/users/${encodeURIComponent(u.username)}`, body);
+      load();
+    } catch (err) { flash('error', err.response?.data?.error || 'Could not update role.'); }
+  }
+
+  async function changeScope(u, field, value) {
+    try {
+      const body = { [field]: value ? Number(value) : null };
+      if (field === 'scope_project_id') body.scope_sub_section_id = null; // reset sub when project changes
+      await api.patch(`/users/${encodeURIComponent(u.username)}`, body);
+      load();
+    } catch (err) { flash('error', err.response?.data?.error || 'Could not update scope.'); }
   }
 
   async function resetPassword() {
@@ -102,16 +135,44 @@ export default function UserAccess({ user }) {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1">Role</label>
-            <select value={nu.role} onChange={e => setNu(s => ({ ...s, role: e.target.value }))}
+            <select value={nu.role} onChange={e => setNu(s => ({ ...s, role: e.target.value, scope_project_id: '', scope_sub_section_id: '' }))}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
+          {nu.role === 'auditor' && (
+            <>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Audited Project *</label>
+                <select value={nu.scope_project_id} onChange={e => setNu(s => ({ ...s, scope_project_id: e.target.value, scope_sub_section_id: '' }))}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
+                  <option value="">Select project…</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Section (optional)</label>
+                <select value={nu.scope_sub_section_id} onChange={e => setNu(s => ({ ...s, scope_sub_section_id: e.target.value }))}
+                  disabled={!nu.scope_project_id}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] disabled:opacity-50">
+                  <option value="">Whole project</option>
+                  {(projects.find(p => p.id === Number(nu.scope_project_id))?.grv_sub_sections || []).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <button type="submit" disabled={creating}
             className="px-4 py-2 bg-[#1a3c5e] text-white text-sm font-bold rounded-lg hover:bg-[#122d47] disabled:opacity-50 transition-colors">
             {creating ? 'Adding…' : '+ Add User'}
           </button>
         </form>
+        {nu.role === 'auditor' && (
+          <p className="mt-3 text-xs text-purple-600 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
+            🔒 Auditor accounts (for lenders) see <strong>only the Grievances dashboard</strong>, read-only, restricted to the selected project{nu.scope_sub_section_id ? ' / sub-section' : ''}.
+          </p>
+        )}
       </div>
 
       {/* Users list */}
@@ -122,13 +183,13 @@ export default function UserAccess({ user }) {
         <table className="min-w-full text-sm">
           <thead>
             <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
-              {['Username', 'Role', 'Actions'].map(h => (
+              {['Username', 'Role', 'Scope', 'Actions'].map(h => (
                 <th key={h} className="px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {loading && <tr><td colSpan={3} className="px-5 py-10 text-center text-gray-400">Loading…</td></tr>}
+            {loading && <tr><td colSpan={4} className="px-5 py-10 text-center text-gray-400">Loading…</td></tr>}
             {!loading && users.map(u => {
               const isOwner = u.username === OWNER;
               return (
@@ -145,6 +206,27 @@ export default function UserAccess({ user }) {
                         className={`px-2.5 py-1 rounded-full text-xs font-bold border-0 cursor-pointer ${roleBadge[u.role] || ''}`}>
                         {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    {u.role === 'auditor' ? (
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <select value={u.scope_project_id || ''} onChange={e => changeScope(u, 'scope_project_id', e.target.value)}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white">
+                          <option value="">— project —</option>
+                          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <select value={u.scope_sub_section_id || ''} onChange={e => changeScope(u, 'scope_sub_section_id', e.target.value)}
+                          disabled={!u.scope_project_id}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white disabled:opacity-50">
+                          <option value="">Whole project</option>
+                          {(projects.find(p => p.id === u.scope_project_id)?.grv_sub_sections || []).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
                     )}
                   </td>
                   <td className="px-5 py-3">

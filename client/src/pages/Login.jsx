@@ -13,8 +13,14 @@ export default function Login({ onLogin }) {
     try {
       const res = await api.post('/auth/login', form);
       localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify({ username: res.data.username, role: res.data.role }));
-      onLogin({ username: res.data.username, role: res.data.role });
+      const u = {
+        username: res.data.username,
+        role: res.data.role,
+        scope_project_id: res.data.scope_project_id ?? null,
+        scope_sub_section_id: res.data.scope_sub_section_id ?? null,
+      };
+      localStorage.setItem('user', JSON.stringify(u));
+      onLogin(u);
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {

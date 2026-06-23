@@ -14,10 +14,25 @@ async function nextRefNo() {
   return `GRV-${String(num).padStart(3, '0')}`;
 }
 
+// Returns the forced scope for auditor (lender) accounts, or null for everyone else.
+function auditorScope(req) {
+  if (req.user?.role !== 'auditor') return null;
+  return {
+    project_id: req.user.scope_project_id ?? null,
+    sub_section_id: req.user.scope_sub_section_id ?? null,
+  };
+}
+
 // GET dashboard stats — MUST be before /:id
 router.get('/stats/summary', async (req, res) => {
   try {
-    const { data: all, error } = await supabase.from('grievances').select('*');
+    let sq = supabase.from('grievances').select('*');
+    const scope = auditorScope(req);
+    if (scope) {
+      if (scope.project_id) sq = sq.eq('project_id', scope.project_id);
+      if (scope.sub_section_id) sq = sq.eq('sub_section_id', scope.sub_section_id);
+    }
+    const { data: all, error } = await sq;
     if (error) throw error;
 
     const today = new Date().toISOString().split('T')[0];
@@ -80,8 +95,14 @@ router.get('/', async (req, res) => {
       .select('*, grv_projects(name), grv_sub_sections(name)')
       .order('created_at', { ascending: false });
 
-    if (project_id)        q = q.eq('project_id', project_id);
-    if (sub_section_id)    q = q.eq('sub_section_id', sub_section_id);
+    // Auditor (lender) accounts are forced to their assigned scope and may not
+    // widen it via query params.
+    const scope = auditorScope(req);
+    const effProjectId = scope ? scope.project_id : project_id;
+    const effSubId     = scope ? scope.sub_section_id : sub_section_id;
+
+    if (effProjectId)      q = q.eq('project_id', effProjectId);
+    if (effSubId)          q = q.eq('sub_section_id', effSubId);
     if (status)            q = q.eq('status', status);
     if (risk_significance) q = q.eq('risk_significance', risk_significance);
     if (escalation_level)  q = q.eq('escalation_level', escalation_level);
@@ -121,6 +142,12 @@ router.get('/:id', async (req, res) => {
       .select('*, grv_projects(name), grv_sub_sections(name)')
       .eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Not found' });
+    // Enforce auditor scope on direct record access
+    const scope = auditorScope(req);
+    if (scope) {
+      if (scope.project_id && data.project_id !== scope.project_id) return res.status(404).json({ error: 'Not found' });
+      if (scope.sub_section_id && data.sub_section_id !== scope.sub_section_id) return res.status(404).json({ error: 'Not found' });
+    }
     res.json({ ...data, project_name: data.grv_projects?.name, sub_section_name: data.grv_sub_sections?.name });
   } catch (err) {
     console.error('GET /grievances/:id error:', err);
@@ -128,9 +155,10 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST create grievance — only whitelisted fields accepted
+// POST create grievance — only whitelisted fields accepted (auditors are read-only)
 router.post('/', async (req, res) => {
   try {
+    if (req.user.role === 'auditor') return res.status(403).json({ error: 'Auditor accounts are read-only.' });
     const refNo = await nextRefNo();
     const {
       date_of_receipt, date_of_registration, project_id, sub_section_id,

@@ -55,6 +55,7 @@ function KPICard({ label, value, sub, borderColor, valueColor, icon }) {
 export default function ExternalGrievances({ user }) {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
+  const isAuditor = user?.role === 'auditor';
 
   const [tab, setTab] = useState('dashboard');
   const [grievances, setGrievances] = useState([]);
@@ -178,6 +179,17 @@ export default function ExternalGrievances({ user }) {
     { key: 'closed',    label: `Closed (${totalClosed})` },
   ];
 
+  // For auditor (lender) accounts: the project/sub-section they are restricted to
+  const auditScopeName = isAuditor ? (() => {
+    const p = projects[0];
+    if (!p) return '';
+    if (user.scope_sub_section_id) {
+      const ss = (p.grv_sub_sections || []).find(s => s.id === user.scope_sub_section_id);
+      return ss ? `${p.name} — ${ss.name}` : p.name;
+    }
+    return p.name;
+  })() : '';
+
   return (
     <div className="min-h-screen" style={{ background: '#FDF6E3' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -199,22 +211,31 @@ export default function ExternalGrievances({ user }) {
               </svg>
               <div>
                 <h1 className="text-xl font-black text-[#1a3c5e]">Grievance Tracker</h1>
-                <p className="text-xs text-gray-400">All Projects — 2025 &amp; 2026</p>
+                <p className="text-xs text-gray-400">{isAuditor ? `Audit view — ${auditScopeName || 'loading…'}` : 'All Projects — 2025 & 2026'}</p>
               </div>
             </div>
 
             {/* Filters */}
             <div className="flex flex-wrap gap-2 flex-1">
-              <select value={filters.project_id} onChange={e => setFilters(f=>({...f, project_id: e.target.value, sub_section_id: ''}))}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
-                <option value="">Project — All</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <select value={filters.sub_section_id} onChange={e => setFilters(f=>({...f, sub_section_id: e.target.value}))}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
-                <option value="">Sub Section — All</option>
-                {allSubSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              {!isAuditor && (
+                <select value={filters.project_id} onChange={e => setFilters(f=>({...f, project_id: e.target.value, sub_section_id: ''}))}
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
+                  <option value="">Project — All</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+              {!isAuditor && (
+                <select value={filters.sub_section_id} onChange={e => setFilters(f=>({...f, sub_section_id: e.target.value}))}
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
+                  <option value="">Sub Section — All</option>
+                  {allSubSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
+              {isAuditor && auditScopeName && (
+                <span className="px-3 py-2 text-sm font-bold text-[#1a3c5e] bg-amber-50 border border-amber-200 rounded-lg">
+                  🔒 {auditScopeName}
+                </span>
+              )}
               <select value={filters.escalation_level} onChange={e => setFilters(f=>({...f, escalation_level: e.target.value}))}
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[160px]">
                 <option value="">Escalation — All</option>
@@ -237,9 +258,11 @@ export default function ExternalGrievances({ user }) {
               <button onClick={exportCSV} className="px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 Export CSV
               </button>
-              <button onClick={() => navigate('/grv/submit')} className="px-3 py-2 text-xs font-semibold bg-[#1a3c5e] text-white rounded-lg hover:bg-[#122d47] transition-colors">
-                + New
-              </button>
+              {!isAuditor && (
+                <button onClick={() => navigate('/grv/submit')} className="px-3 py-2 text-xs font-semibold bg-[#1a3c5e] text-white rounded-lg hover:bg-[#122d47] transition-colors">
+                  + New
+                </button>
+              )}
             </div>
           </div>
         </div>

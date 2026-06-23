@@ -7,8 +7,12 @@ router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('grv_projects').select('*, grv_sub_sections(*)').order('id');
+    let q = supabase.from('grv_projects').select('*, grv_sub_sections(*)').order('id');
+    // Auditor (lender) accounts only see the project they are assigned to
+    if (req.user?.role === 'auditor' && req.user.scope_project_id) {
+      q = q.eq('id', req.user.scope_project_id);
+    }
+    const { data, error } = await q;
     if (error) throw error;
     res.json(data);
   } catch (err) {

@@ -251,7 +251,10 @@ export default function NavBar({ user, onLogout }) {
   );
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
-  const roleLabel = user?.role === 'admin' ? 'Administrator' : user?.role === 'submitter' ? 'Grievance Submitter' : 'Viewer';
+  const roleLabel = user?.role === 'admin' ? 'Administrator'
+    : user?.role === 'submitter' ? 'Grievance Submitter'
+    : user?.role === 'auditor' ? 'Auditor (Lender)'
+    : 'Viewer';
 
   return (
     <nav className="bg-gradient-to-r from-[#15304c] via-[#1a3c5e] to-[#15304c] shadow-lg sticky top-0 z-40 border-b-2 border-[#FFD700]/70">
@@ -272,7 +275,9 @@ export default function NavBar({ user, onLogout }) {
             <div className="hidden sm:block w-px h-8 bg-white/15" />
 
             <div className="hidden sm:flex items-center gap-1">
-              {user?.role === 'submitter' ? (
+              {user?.role === 'auditor' ? (
+                navLink('/grv/grievances', 'Grievances Dashboard')
+              ) : user?.role === 'submitter' ? (
                 <>
                   {navLink('/grv/grievances', 'Grievances')}
                   {navLink('/grv/submit', 'Submit Grievance')}
@@ -305,7 +310,7 @@ export default function NavBar({ user, onLogout }) {
 
           {/* Reminders + Profile dropdown */}
           <div className="flex items-center gap-1.5">
-            {user?.role !== 'submitter' && <NotificationBell />}
+            {(user?.role === 'admin' || user?.role === 'viewer') && <NotificationBell />}
             <ProfileMenu user={user} initials={initials} roleLabel={roleLabel} onLogout={handleLogout} />
           </div>
         </div>

@@ -44,7 +44,13 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            {user.role === 'submitter' ? (
+            {user.role === 'auditor' ? (
+              <>
+                <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
+                <Route path="/settings"       element={<Settings user={user} />} />
+                <Route path="*"               element={<Navigate to="/grv/grievances" />} />
+              </>
+            ) : user.role === 'submitter' ? (
               <>
                 <Route path="/grv/submit"     element={<SubmitGrievance />} />
                 <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
