@@ -373,85 +373,104 @@ export default function ConstructionProgress() {
 
         {/* ══════ TREND ══════ */}
         {tab === 'trend' && (
-          <div className="space-y-5">
-            {/* Project filter */}
-            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Project</span>
-              {['', ...structure.projects].map(p => (
-                <button key={p || 'all'} onClick={() => setTrendProject(p)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${trendProject === p ? 'bg-[#1a3c5e] text-white shadow-sm' : 'text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
-                  {p || 'All Projects'}
-                </button>
-              ))}
-            </div>
+          <div className="space-y-8">
+            {structure.projects.map((project, pi) => {
+              const projBase = allData.filter(r => r.project === project);
+              if (!projBase.length) return null;
 
-            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">
-                Overall Average Progress by Month{trendProject ? ` — ${trendProject}` : ''}
-              </p>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={periodSummary} barSize={40}>
-                  <XAxis dataKey="period" tick={{fontSize:11}} />
-                  <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
-                  <Tooltip formatter={v=>[`${v}%`,'Avg Progress']} />
-                  <Bar dataKey="avg" fill="#1a3c5e" radius={[6,6,0,0]} label={{position:'top',fontSize:11,fontWeight:700}} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+              const projPeriods = [...new Set(projBase.map(r => r.reporting_period))].filter(Boolean).sort();
+              const projSummary = projPeriods.map(p => {
+                const rows = projBase.filter(r => r.reporting_period === p && r.pct_progress !== null);
+                return { period: fmtPeriod(p), avg: rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : 0 };
+              });
+              const projTrendData = projPeriods.map(p => {
+                const entry = { period: fmtPeriod(p) };
+                COMPONENTS.forEach(({ name }) => {
+                  const rows = projBase.filter(r => r.reporting_period === p && r.component === name && r.pct_progress !== null);
+                  if (rows.length) entry[name] = Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length);
+                });
+                return entry;
+              });
+              const projSections = [...new Set(projBase.map(r => r.section))].filter(Boolean).sort(bySectionOrder);
+              const PROJ_COLORS = ['#1a3c5e','#2a9d8f','#e63946','#8338ec'];
+              const headerColor = PROJ_COLORS[pi % PROJ_COLORS.length];
 
-            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">
-                Progress Trend per Component{trendProject ? ` — ${trendProject}` : ''}
-              </p>
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={trendData} margin={{left:10,right:20,top:5,bottom:5}}>
-                  <XAxis dataKey="period" tick={{fontSize:11}} />
-                  <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
-                  <Tooltip formatter={(v,name)=>[`${v}%`,name]} />
-                  <Legend wrapperStyle={{fontSize:11}} />
-                  {COMPONENTS.map(({name},i) => (
-                    <Line key={name} type="monotone" dataKey={name} stroke={COLORS[i%COLORS.length]}
-                      strokeWidth={2} dot={{r:4}} connectNulls />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+              return (
+                <div key={project} className="space-y-4">
+                  {/* Project header */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="px-4 py-1 rounded-full text-xs font-black text-white uppercase tracking-wider" style={{background: headerColor}}>{project}</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
 
-            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Monthly Snapshot — Average by Section{trendProject ? ` — ${trendProject}` : ''}
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">Section</th>
-                      {trendPeriods.map(p => <th key={p} className="px-4 py-3 text-center text-[11px] font-bold text-slate-500 uppercase whitespace-nowrap">{fmtPeriod(p)}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {trendSections.map(sec => (
-                      <tr key={sec} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-bold text-slate-700">{sec}</td>
-                        {trendPeriods.map(p => {
-                          const rows = trendBase.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
-                          const avg = rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : null;
-                          return (
-                            <td key={p} className="px-4 py-3 text-center">
-                              {avg === null ? <span className="text-slate-300">—</span> : (
-                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-black ${pctBg(avg)}`}>{avg}%</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  {/* Bar chart */}
+                  <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={projSummary} barSize={36}>
+                        <XAxis dataKey="period" tick={{fontSize:11}} />
+                        <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
+                        <Tooltip formatter={v=>[`${v}%`,'Avg Progress']} />
+                        <Bar dataKey="avg" fill={headerColor} radius={[6,6,0,0]} label={{position:'top',fontSize:11,fontWeight:700,fill:headerColor}} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Line chart per component */}
+                  <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <LineChart data={projTrendData} margin={{left:10,right:20,top:5,bottom:5}}>
+                        <XAxis dataKey="period" tick={{fontSize:11}} />
+                        <YAxis domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:11}} />
+                        <Tooltip formatter={(v,name)=>[`${v}%`,name]} />
+                        <Legend wrapperStyle={{fontSize:11}} />
+                        {COMPONENTS.map(({name},i) => (
+                          <Line key={name} type="monotone" dataKey={name} stroke={COLORS[i%COLORS.length]}
+                            strokeWidth={2} dot={{r:3}} connectNulls />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Monthly snapshot table */}
+                  <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-slate-100">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase">Section</th>
+                            {projPeriods.map(p => <th key={p} className="px-4 py-3 text-center text-[11px] font-bold text-slate-500 uppercase whitespace-nowrap">{fmtPeriod(p)}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {projSections.map(sec => (
+                            <tr key={sec} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 font-bold text-slate-700">{sec}</td>
+                              {projPeriods.map(p => {
+                                const rows = projBase.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
+                                const avg = rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : null;
+                                return (
+                                  <td key={p} className="px-4 py-3 text-center">
+                                    {avg === null ? <span className="text-slate-300">—</span> : (
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-black ${pctBg(avg)}`}>{avg}%</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
