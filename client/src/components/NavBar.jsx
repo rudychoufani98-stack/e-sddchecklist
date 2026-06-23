@@ -1,5 +1,109 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import api from '../api';
+
+const CAL_PALETTE = ['#1a3c5e','#e63946','#2a9d8f','#e9a92b','#8338ec','#3a86ff','#fb5607','#06d6a0','#d62828','#457b9d','#9d4edd','#0aa1a1'];
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtShort(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState([]);
+  const ref = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let active = true;
+    api.get('/esg-calendar').then(r => { if (active) setEvents(r.data); }).catch(() => {});
+    // refresh every 5 min while the app is open
+    const t = setInterval(() => api.get('/esg-calendar').then(r => setEvents(r.data)).catch(() => {}), 300000);
+    return () => { active = false; clearInterval(t); };
+  }, []);
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const tKey = todayKey();
+  const horizon = (() => { const d = new Date(); d.setDate(d.getDate() + 14); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+
+  const pending  = events.filter(e => e.status !== 'done');
+  const overdue  = pending.filter(e => e.deadline < tKey).sort((a,b) => a.deadline.localeCompare(b.deadline));
+  const upcoming = pending.filter(e => e.deadline >= tKey && e.deadline <= horizon).sort((a,b) => a.deadline.localeCompare(b.deadline));
+  const count = overdue.length + upcoming.length;
+
+  const projects = [...new Set(events.map(e => e.project))].sort();
+  const colorOf = p => CAL_PALETTE[Math.max(0, projects.indexOf(p)) % CAL_PALETTE.length];
+
+  function go(e) { setOpen(false); navigate('/esg-calendar'); }
+
+  function Row({ e, label, labelColor }) {
+    return (
+      <button onClick={go} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors">
+        <span className="w-2 h-8 rounded-full flex-shrink-0" style={{ background: colorOf(e.project) }} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-800 truncate">{e.deliverable}</div>
+          <div className="text-xs text-gray-400 truncate">{e.project}{e.sub_section ? ` · ${e.sub_section}` : ''}</div>
+        </div>
+        <span className={`text-xs font-bold flex-shrink-0 ${labelColor}`}>{label}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className="relative p-2 rounded-lg hover:bg-white/10 transition-colors" aria-label="Reminders">
+        <svg className="w-5 h-5 text-blue-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {count > 0 && (
+          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 bg-[#e63946] text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-[#1a3c5e]">
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 z-50 w-[340px] max-h-[70vh] overflow-y-auto">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
+            <p className="text-sm font-bold text-gray-800">Reminders</p>
+            <span className="text-xs text-gray-400">{count} active</span>
+          </div>
+
+          {count === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-gray-400">No upcoming or overdue deadlines 🎉</div>
+          )}
+
+          {overdue.length > 0 && (
+            <div>
+              <p className="px-4 pt-3 pb-1 text-[11px] font-bold text-red-500 uppercase tracking-wider">Overdue ({overdue.length})</p>
+              {overdue.map(e => <Row key={e.id} e={e} label={fmtShort(e.deadline)} labelColor="text-red-600" />)}
+            </div>
+          )}
+          {upcoming.length > 0 && (
+            <div>
+              <p className="px-4 pt-3 pb-1 text-[11px] font-bold text-amber-600 uppercase tracking-wider">Next 14 days ({upcoming.length})</p>
+              {upcoming.map(e => <Row key={e.id} e={e} label={fmtShort(e.deadline)} labelColor="text-amber-600" />)}
+            </div>
+          )}
+
+          <button onClick={go} className="w-full px-4 py-3 border-t border-gray-100 text-sm font-semibold text-[#1a3c5e] hover:bg-gray-50 transition-colors sticky bottom-0 bg-white">
+            Open ESG Calendar →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DropdownMenu({ label, items, basePath }) {
   const [open, setOpen] = useState(false);
@@ -199,8 +303,11 @@ export default function NavBar({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Profile dropdown */}
-          <ProfileMenu user={user} initials={initials} roleLabel={roleLabel} onLogout={handleLogout} />
+          {/* Reminders + Profile dropdown */}
+          <div className="flex items-center gap-1.5">
+            {user?.role !== 'submitter' && <NotificationBell />}
+            <ProfileMenu user={user} initials={initials} roleLabel={roleLabel} onLogout={handleLogout} />
+          </div>
         </div>
       </div>
     </nav>
