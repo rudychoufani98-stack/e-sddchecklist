@@ -72,6 +72,9 @@ export default function ConstructionProgress() {
   const [selPeriod,  setSelPeriod]  = useState('');
   const [selProject, setSelProject] = useState('');
 
+  // Trend tab project filter
+  const [trendProject, setTrendProject] = useState('');
+
   // Enter Progress state
   const [epPeriod,   setEpPeriod]   = useState('');
   const [epProject,  setEpProject]  = useState('LCCH');
@@ -125,21 +128,24 @@ export default function ConstructionProgress() {
   const completedCount  = dashData.filter(r => Number(r.pct_progress) >= 100).length;
   const inProgressCount = dashData.filter(r => Number(r.pct_progress) > 0 && Number(r.pct_progress) < 100).length;
 
-  // Trend data — avg per component per period
-  const trendPeriods = [...periods].sort();
+  // Trend data — filtered by trendProject when set
+  const trendBase = trendProject ? allData.filter(r => r.project === trendProject) : allData;
+  const trendPeriods = [...new Set(trendBase.map(r => r.reporting_period))].filter(Boolean).sort();
   const trendData = trendPeriods.map(p => {
     const entry = { period: fmtPeriod(p) };
     COMPONENTS.forEach(({ name }) => {
-      const rows = allData.filter(r => r.reporting_period === p && r.component === name && r.pct_progress !== null);
+      const rows = trendBase.filter(r => r.reporting_period === p && r.component === name && r.pct_progress !== null);
       if (rows.length) entry[name] = Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length);
     });
     return entry;
   });
 
   const periodSummary = trendPeriods.map(p => {
-    const rows = allData.filter(r => r.reporting_period === p && r.pct_progress !== null);
+    const rows = trendBase.filter(r => r.reporting_period === p && r.pct_progress !== null);
     return { period: fmtPeriod(p), avg: rows.length ? Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length) : 0 };
   });
+
+  const trendSections = [...new Set(trendBase.map(r => r.section))].filter(Boolean).sort(bySectionOrder);
 
   const epSubSections = (
     (structure.subSectionsByProject[epProject] || structure.subSections).slice().sort(bySectionOrder)
@@ -368,8 +374,21 @@ export default function ConstructionProgress() {
         {/* ══════ TREND ══════ */}
         {tab === 'trend' && (
           <div className="space-y-5">
+            {/* Project filter */}
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Project</span>
+              {['', ...structure.projects].map(p => (
+                <button key={p || 'all'} onClick={() => setTrendProject(p)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${trendProject === p ? 'bg-[#1a3c5e] text-white shadow-sm' : 'text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
+                  {p || 'All Projects'}
+                </button>
+              ))}
+            </div>
+
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Overall Average Progress by Month</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">
+                Overall Average Progress by Month{trendProject ? ` — ${trendProject}` : ''}
+              </p>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={periodSummary} barSize={40}>
                   <XAxis dataKey="period" tick={{fontSize:11}} />
@@ -381,7 +400,9 @@ export default function ConstructionProgress() {
             </div>
 
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Progress Trend per Component</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">
+                Progress Trend per Component{trendProject ? ` — ${trendProject}` : ''}
+              </p>
               <ResponsiveContainer width="100%" height={380}>
                 <LineChart data={trendData} margin={{left:10,right:20,top:5,bottom:5}}>
                   <XAxis dataKey="period" tick={{fontSize:11}} />
@@ -398,7 +419,9 @@ export default function ConstructionProgress() {
 
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-slate-100">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monthly Snapshot — Average by Section</p>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Monthly Snapshot — Average by Section{trendProject ? ` — ${trendProject}` : ''}
+                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm border-collapse">
@@ -409,11 +432,11 @@ export default function ConstructionProgress() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {structure.sections.map(sec => (
+                    {trendSections.map(sec => (
                       <tr key={sec} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-bold text-slate-700">{sec}</td>
                         {trendPeriods.map(p => {
-                          const rows = allData.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
+                          const rows = trendBase.filter(r => r.section === sec && r.reporting_period === p && r.pct_progress !== null);
                           const avg = rows.length ? Math.round(rows.reduce((s,r)=>s+Number(r.pct_progress),0)/rows.length) : null;
                           return (
                             <td key={p} className="px-4 py-3 text-center">
