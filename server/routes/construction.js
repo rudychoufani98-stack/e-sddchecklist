@@ -57,7 +57,12 @@ router.get('/structure', requireAdminOrConstruction, async (req, res) => {
     // Map component → key_activities
     const componentMap = {};
     data.forEach(r => { if (r.component && !componentMap[r.component]) componentMap[r.component] = r.key_activities; });
-    res.json({ projects, sections, subSections, components, componentMap });
+    // Sub-sections grouped by project
+    const subSectionsByProject = {};
+    projects.forEach(p => {
+      subSectionsByProject[p] = [...new Set(data.filter(r => r.project === p).map(r => r.sub_section))].filter(Boolean);
+    });
+    res.json({ projects, sections, subSections, components, componentMap, subSectionsByProject });
   } catch (err) {
     res.status(500).json({ error: 'An internal error occurred' });
   }

@@ -65,7 +65,7 @@ export default function ConstructionProgress() {
   const [tab, setTab]             = useState('dashboard');
   const [allData, setAllData]     = useState([]);
   const [periods, setPeriods]     = useState([]);
-  const [structure, setStructure] = useState({ projects: [], sections: [], subSections: [], components: [], componentMap: {} });
+  const [structure, setStructure] = useState({ projects: [], sections: [], subSections: [], components: [], componentMap: {}, subSectionsByProject: {} });
   const [loading, setLoading]     = useState(true);
 
   // Dashboard filters — no automatic filter; default shows latest cumulative data across all periods
@@ -141,7 +141,9 @@ export default function ConstructionProgress() {
     return { period: fmtPeriod(p), avg: rows.length ? Math.round(rows.reduce((s,r) => s + Number(r.pct_progress), 0) / rows.length) : 0 };
   });
 
-  const epSubSections = structure.subSections.length ? structure.subSections : ['1A','1B','1C','2','3A','3B','4A','4B','5','6','7','8','9'];
+  const epSubSections = (
+    (structure.subSectionsByProject[epProject] || structure.subSections).slice().sort(bySectionOrder)
+  ) || ['1A','1B','1C','2'];
 
   async function saveProgress() {
     if (!epPeriod) { setEpMsg('Select a reporting period first.'); return; }
@@ -558,23 +560,28 @@ export default function ConstructionProgress() {
 
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Current Structure</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm font-bold text-slate-700 mb-2">Projects</p>
-                  {structure.projects.map(p => <div key={p} className="text-sm text-slate-600 py-1 border-b border-slate-50">{p}</div>)}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-700 mb-2">Sections</p>
-                  {structure.sections.map(s => <div key={s} className="text-sm text-slate-600 py-1 border-b border-slate-50">{s}</div>)}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-700 mb-2">Sub-Sections</p>
-                  <div className="flex flex-wrap gap-2">
-                    {structure.subSections.map(s => (
-                      <span key={s} className="px-2 py-1 bg-[#1a3c5e] text-white text-xs font-bold rounded-lg">{s}</span>
-                    ))}
-                  </div>
-                </div>
+              <div className="space-y-4">
+                {structure.projects.map((proj, pi) => {
+                  const subs = (structure.subSectionsByProject[proj] || []).slice().sort(bySectionOrder);
+                  const PROJ_COLORS = ['bg-[#1a3c5e]','bg-[#2a9d8f]','bg-[#e63946]','bg-[#8338ec]'];
+                  const color = PROJ_COLORS[pi % PROJ_COLORS.length];
+                  return (
+                    <div key={proj} className="border border-slate-100 rounded-xl overflow-hidden">
+                      <div className={`${color} px-4 py-2 flex items-center justify-between`}>
+                        <span className="text-white text-sm font-bold">{proj}</span>
+                        <span className="text-white/70 text-xs">{subs.length} sub-section{subs.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="px-4 py-3 flex flex-wrap gap-2">
+                        {subs.length === 0
+                          ? <span className="text-xs text-slate-400 italic">No sub-sections yet</span>
+                          : subs.map(s => (
+                            <span key={s} className={`px-2.5 py-1 ${color} text-white text-xs font-bold rounded-lg`}>{s}</span>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
