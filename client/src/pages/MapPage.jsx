@@ -33,8 +33,6 @@ const MAP_STYLE = {
   },
   layers: [
     { id: 'satellite', type: 'raster', source: 'satellite' },
-    // Hillshade adds depth/relief shading even when looking straight down
-    { id: 'hillshade', type: 'hillshade', source: 'terrainDEM', paint: { 'hillshade-exaggeration': 0.4 } },
     { id: 'places', type: 'raster', source: 'places', paint: { 'raster-opacity': 0.9 } },
   ],
 };
@@ -88,6 +86,7 @@ export default function MapPage({ user }) {
   const [exaggeration, setExaggeration] = useState(0);
   const [importing, setImporting] = useState(false);
   const [joinPoints, setJoinPoints] = useState(false);
+  const [diag, setDiag] = useState('');
   const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -211,6 +210,7 @@ export default function MapPage({ user }) {
         properties: { color: f.color || colorForProject(f.project, projects), id: f.id, name: f.name },
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
+    setDiag(`roads in DB: ${features.filter(f => f.type === 'road').length} · rendered: ${roadFeatures.length} · pts: ${features.filter(f => f.type === 'extraction').length} · mapReady: ${mapReady} · layer: ${map.getLayer('roads-line') ? 'yes' : 'NO'}`);
 
     // Auto-frame everything once, the first time features arrive
     if (!fittedRef.current && features.length) {
@@ -665,6 +665,11 @@ export default function MapPage({ user }) {
         <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[260px]">
           🛰️ Esri World Imagery — newest available, date varies by area. Each pin shows the date you added it.
         </div>
+        {diag && (
+          <div className="absolute bottom-2 left-2 bg-black/75 text-[10px] text-green-300 font-mono px-2 py-1 rounded-md z-10 max-w-[420px]">
+            {diag}
+          </div>
+        )}
       </div>
     </div>
   );
