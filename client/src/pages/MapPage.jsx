@@ -46,6 +46,8 @@ const MAP_STYLE = {
 const HIDDEN_NAMES = new Set([
   'lagos', 'lagos state', 'ogun', 'oyo', 'ondo', 'edo', 'delta', 'bayelsa',
   'rivers', 'abia', 'cross river', 'akwa ibom', 'kogi', 'enugu', 'anambra', 'imo',
+  // Broken "connect points into one road" artifact (7 pts, 235km zigzag jumps)
+  '1st legacy project sbs 23062026',
 ]);
 const isHidden = (f) => HIDDEN_NAMES.has(String(f.name || '').trim().toLowerCase());
 
