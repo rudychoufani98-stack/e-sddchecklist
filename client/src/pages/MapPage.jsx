@@ -83,6 +83,16 @@ function progressColor(pct) {
 // The construction section a road is linked to is stored in its `category` field.
 function linkedSection(f) { return (f.category || '').trim() || null; }
 
+// Extraction-site categories — each has a fixed pin colour.
+const CATEGORY_COLORS = {
+  'Environmental': '#22c55e',     // green
+  'Social': '#3b82f6',            // blue
+  'Cultural Heritage': '#f59e0b', // amber
+  'Health & Safety': '#ef4444',   // red
+  'Other': '#9ca3af',             // gray
+};
+const CATEGORIES = Object.keys(CATEGORY_COLORS);
+
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -385,8 +395,9 @@ export default function MapPage({ user }) {
     const s = sections.find(x => x.label === label);
     return s ? s.avg : null;
   }
-  // Colour a feature: per-section palette, or by construction % when in progress mode
+  // Colour a feature: extraction sites by category, roads by section (or % in progress mode)
   function featureColor(f) {
+    if (f.type === 'extraction') return CATEGORY_COLORS[f.category] || colorForFeature(f);
     if (colorMode === 'progress' && f.type === 'road') {
       const link = linkedSection(f);
       return progressColor(link ? sectionAvg(link) : null);
@@ -591,7 +602,14 @@ export default function MapPage({ user }) {
       <div className={`flex-1 overflow-auto p-6 ${view === 'table' ? 'block' : 'hidden'}`}>
         <div className="max-w-5xl mx-auto">
           <h2 className="text-xl font-black text-[#1a3c5e] mb-1">Extraction Sites</h2>
-          <p className="text-sm text-slate-500 mb-4">{extractionRows.length} site{extractionRows.length !== 1 ? 's' : ''} · click 📍 to locate on the map, ✕ to delete</p>
+          <p className="text-sm text-slate-500 mb-3">{extractionRows.length} site{extractionRows.length !== 1 ? 's' : ''} · click 📍 to locate on the map, ✕ to delete</p>
+          <div className="flex flex-wrap gap-3 mb-4 text-xs text-slate-600">
+            {CATEGORIES.map(c => (
+              <span key={c} className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-full" style={{ background: CATEGORY_COLORS[c] }} />{c}
+              </span>
+            ))}
+          </div>
           {extractionRows.length === 0 ? (
             <div className="bg-white border border-amber-100 rounded-2xl p-10 text-center text-slate-400">
               No extraction sites yet. Switch to the Map tab, click <b>📍 Extraction</b>, and place one.
@@ -611,12 +629,12 @@ export default function MapPage({ user }) {
                     <tr key={f.id} className="hover:bg-amber-50/30">
                       <td className="px-4 py-3 font-semibold text-slate-800">
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: colorForFeature(f) }} />{f.name}
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: featureColor(f) }} />{f.name}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{f.project}</td>
                       <td className="px-4 py-3">{f.category
-                        ? <span className="px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-600 rounded-full">{f.category}</span>
+                        ? <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold rounded-full text-white" style={{ background: CATEGORY_COLORS[f.category] || '#9ca3af' }}>{f.category}</span>
                         : <span className="text-slate-300">—</span>}</td>
                       <td className="px-4 py-3 text-slate-500 max-w-[220px]">{f.notes || <span className="text-slate-300">—</span>}</td>
                       <td className="px-4 py-3 text-slate-500 font-mono text-xs whitespace-nowrap">{f.coordinates[1].toFixed(5)}, {f.coordinates[0].toFixed(5)}</td>
@@ -750,9 +768,17 @@ export default function MapPage({ user }) {
                     <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                       placeholder="Site name (e.g. Borrow pit A)"
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                    <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                      placeholder="Category (e.g. Quarry, Borrow pit, Soil)"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+                      <option value="">Select category…</option>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {form.category && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <span className="w-3 h-3 rounded-full" style={{ background: CATEGORY_COLORS[form.category] }} />
+                        Pin colour for {form.category}
+                      </div>
+                    )}
                     <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                       placeholder="Notes (optional)"
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
