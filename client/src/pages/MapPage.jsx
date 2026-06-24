@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import api from '../api';
 
-// Fully-free basemap: ESRI satellite imagery + AWS terrarium DEM for 3D terrain. No API key.
+// Fully-free basemap: ESRI satellite imagery + place-name labels + AWS terrarium DEM. No API key.
 const MAP_STYLE = {
   version: 8,
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -14,6 +14,13 @@ const MAP_STYLE = {
       tileSize: 256,
       attribution: 'Tiles © Esri — World Imagery',
     },
+    // Transparent overlay with country borders, city & place names
+    places: {
+      type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      attribution: 'Labels © Esri',
+    },
     terrainDEM: {
       type: 'raster-dem',
       tiles: ['https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png'],
@@ -22,7 +29,12 @@ const MAP_STYLE = {
       maxzoom: 14,
     },
   },
-  layers: [{ id: 'satellite', type: 'raster', source: 'satellite' }],
+  layers: [
+    { id: 'satellite', type: 'raster', source: 'satellite' },
+    // Hillshade adds depth/relief shading even when looking straight down
+    { id: 'hillshade', type: 'hillshade', source: 'terrainDEM', paint: { 'hillshade-exaggeration': 0.4 } },
+    { id: 'places', type: 'raster', source: 'places', paint: { 'raster-opacity': 0.9 } },
+  ],
 };
 
 // Deterministic color per project
@@ -47,6 +59,10 @@ export default function MapPage({ user }) {
   const [draftPoint, setDraftPoint] = useState(null); // [lng,lat]
   const [form, setForm] = useState({ name: '', category: '', notes: '' });
   const [pasteText, setPasteText] = useState('');
+  const [latInput, setLatInput] = useState('');
+  const [lngInput, setLngInput] = useState('');
+  const [showLabels, setShowLabels] = useState(true);
+  const [exaggeration, setExaggeration] = useState(1.6);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -97,8 +113,9 @@ export default function MapPage({ user }) {
       map.setTerrain({ source: 'terrainDEM', exaggeration: 1.6 });
       try {
         map.setSky({
-          'sky-color': '#0a1a2f', 'horizon-color': '#3a6ea5',
-          'fog-color': '#dfe9f5', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5,
+          'sky-color': '#5a8fcf', 'horizon-color': '#cfe0f2',
+          'fog-color': '#eaf1f9', 'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.6,
+          'fog-ground-blend': 0.3, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 0.4, 13, 0.1],
         });
       } catch { /* older versions */ }
       map.addControl(new maplibregl.TerrainControl({ source: 'terrainDEM', exaggeration: 1.6 }), 'top-right');
@@ -199,13 +216,40 @@ export default function MapPage({ user }) {
     map.getSource('draft').setData({ type: 'FeatureCollection', features: draftFeatures });
   }, [draftRoad, draftPoint, mode, mapReady]);
 
+  // Toggle place-name labels
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getLayer('places')) return;
+    map.setLayoutProperty('places', 'visibility', showLabels ? 'visible' : 'none');
+  }, [showLabels, mapReady]);
+
+  // Terrain exaggeration slider
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.setTerrain({ source: 'terrainDEM', exaggeration });
+  }, [exaggeration, mapReady]);
+
+  // When typing manual coordinates for an extraction point, place + fly to it
+  useEffect(() => {
+    if (mode !== 'extraction') return;
+    const lat = parseFloat(latInput), lng = parseFloat(lngInput);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      setDraftPoint([lng, lat]);
+    }
+  }, [latInput, lngInput, mode]);
+
   function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 3500); }
 
   function startMode(m) {
     setMode(m);
     setDraftRoad([]); setDraftPoint(null);
     setForm({ name: '', category: '', notes: '' });
-    setPasteText('');
+    setPasteText(''); setLatInput(''); setLngInput('');
+  }
+
+  function flyToDraftPoint() {
+    if (draftPoint) mapRef.current?.flyTo({ center: draftPoint, zoom: 14, pitch: 60, duration: 1500 });
   }
 
   function cancelDraft() { startMode('view'); }
@@ -315,23 +359,27 @@ export default function MapPage({ user }) {
                 </div>
               )}
 
-              {/* Road drawing panel */}
+              {/* Road panel — coordinate entry first */}
               {mode === 'road' && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-2.5">
-                  <p className="text-xs text-blue-800 font-semibold">Click on the map to add points ({draftRoad.length} so far).</p>
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-blue-700 font-semibold">…or paste coordinates</summary>
-                    <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={4}
-                      placeholder={'lng, lat per line, e.g.\n6.421, 8.512\n6.430, 8.520'}
-                      className="w-full mt-1.5 px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
-                    <button onClick={parsePastedCoords} className="mt-1 px-2 py-1 text-xs font-bold bg-blue-600 text-white rounded">Load points</button>
-                  </details>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Road name (e.g. Section 1 alignment)"
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                  <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Notes (optional)"
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Paste the road coordinates</p>
+                  <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={6}
+                    placeholder={'One point per line: longitude, latitude\n\n6.421, 8.512\n6.430, 8.520\n6.438, 8.529'}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                  <button onClick={parsePastedCoords} className="w-full px-2 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    ↧ Load {pasteText.trim() ? `(${pasteText.trim().split('\n').filter(Boolean).length} lines)` : 'points'}
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">
+                    {draftRoad.length ? `✓ ${draftRoad.length} points loaded` : 'or click on the map to add points'}
+                  </p>
+                  <div className="border-t border-blue-100 pt-2 space-y-2">
+                    <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Road name (e.g. Section 1 alignment)"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                    <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Notes (optional)"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  </div>
                   <div className="flex gap-1.5">
                     <button onClick={() => setDraftRoad(p => p.slice(0, -1))} disabled={!draftRoad.length}
                       className="flex-1 px-2 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg disabled:opacity-40">↶ Undo</button>
@@ -345,18 +393,39 @@ export default function MapPage({ user }) {
               {/* Extraction panel */}
               {mode === 'extraction' && (
                 <div className="bg-red-50 border border-red-100 rounded-xl p-3 space-y-2.5">
-                  <p className="text-xs text-red-800 font-semibold">
-                    {draftPoint ? `Point set: ${draftPoint[1].toFixed(5)}, ${draftPoint[0].toFixed(5)}` : 'Click on the map to place the site.'}
+                  <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Enter coordinates</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Latitude</label>
+                      <input type="number" step="any" value={latInput} onChange={e => setLatInput(e.target.value)}
+                        placeholder="8.51234"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Longitude</label>
+                      <input type="number" step="any" value={lngInput} onChange={e => setLngInput(e.target.value)}
+                        placeholder="6.42100"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono" />
+                    </div>
+                  </div>
+                  <button onClick={flyToDraftPoint} disabled={!draftPoint}
+                    className="w-full px-2 py-1.5 text-xs font-bold bg-slate-700 text-white rounded-lg disabled:opacity-40">
+                    🎯 Go to coordinate
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">
+                    {draftPoint ? `✓ ${draftPoint[1].toFixed(5)}, ${draftPoint[0].toFixed(5)}` : 'or click directly on the map'}
                   </p>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Site name (e.g. Borrow pit A)"
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                  <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    placeholder="Category (e.g. Quarry, Borrow pit, Soil)"
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                  <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Notes (optional)"
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  <div className="border-t border-red-100 pt-2 space-y-2">
+                    <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Site name (e.g. Borrow pit A)"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                    <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                      placeholder="Category (e.g. Quarry, Borrow pit, Soil)"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                    <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Notes (optional)"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  </div>
                   <div className="flex gap-1.5">
                     <button onClick={cancelDraft} className="flex-1 px-2 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg">Cancel</button>
                     <button onClick={saveExtraction} disabled={saving || !draftPoint}
@@ -368,6 +437,22 @@ export default function MapPage({ user }) {
           )}
 
           {msg && <p className={`text-xs font-semibold ${msg.startsWith('✓') ? 'text-green-600' : 'text-amber-600'}`}>{msg}</p>}
+
+          {/* Display controls */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Display</label>
+            <label className="flex items-center gap-2 text-xs text-slate-600 mb-2 cursor-pointer">
+              <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} />
+              Show city & country names
+            </label>
+            <div>
+              <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                <span>3D terrain intensity</span><span>{exaggeration.toFixed(1)}×</span>
+              </div>
+              <input type="range" min="0" max="3" step="0.2" value={exaggeration}
+                onChange={e => setExaggeration(Number(e.target.value))} className="w-full" />
+            </div>
+          </div>
 
           {/* Layers / feature list */}
           <div>
