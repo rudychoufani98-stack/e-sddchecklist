@@ -40,6 +40,15 @@ const MAP_STYLE = {
   ],
 };
 
+// State-boundary outlines and state-name pins that came in with the KMZ import
+// are not roads — hide them so only the real alignments show. (Data is kept in the
+// DB; this only filters the view.) Matched case-insensitively by exact name.
+const HIDDEN_NAMES = new Set([
+  'lagos', 'lagos state', 'ogun', 'oyo', 'ondo', 'edo', 'delta', 'bayelsa',
+  'rivers', 'abia', 'cross river', 'akwa ibom', 'kogi', 'enugu', 'anambra', 'imo',
+]);
+const isHidden = (f) => HIDDEN_NAMES.has(String(f.name || '').trim().toLowerCase());
+
 // Deterministic color per project
 const PROJ_COLORS = ['#FFD400', '#00E0FF', '#FF5D8F', '#7CFF6B', '#FF9F1C', '#B388FF'];
 function colorForProject(project, projects) {
@@ -198,7 +207,7 @@ export default function MapPage({ user }) {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getSource('roads')) return;
     const roadFeatures = features
-      .filter(f => f.type === 'road' && visible[f.project])
+      .filter(f => f.type === 'road' && visible[f.project] && !isHidden(f))
       .map(f => ({
         type: 'Feature',
         geometry: roadGeometry(f.coordinates),
@@ -218,7 +227,7 @@ export default function MapPage({ user }) {
     if (!fittedRef.current && features.length) {
       fittedRef.current = true;
       const bounds = new maplibregl.LngLatBounds();
-      features.forEach(f => {
+      features.filter(f => !isHidden(f)).forEach(f => {
         if (f.type === 'extraction') bounds.extend(f.coordinates);
         else if (isMultiLine(f.coordinates)) f.coordinates.forEach(line => line.forEach(c => bounds.extend(c)));
         else f.coordinates.forEach(c => bounds.extend(c));
@@ -233,7 +242,7 @@ export default function MapPage({ user }) {
     if (!map || !mapReady) return;
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
-    features.filter(f => f.type === 'extraction' && visible[f.project]).forEach(f => {
+    features.filter(f => f.type === 'extraction' && visible[f.project] && !isHidden(f)).forEach(f => {
       const color = f.color || colorForProject(f.project, projects);
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
@@ -341,8 +350,7 @@ export default function MapPage({ user }) {
         if (!g) return;
         if (g.type === 'LineString') acc.push(g.coordinates.map(c => [c[0], c[1]]));
         else if (g.type === 'MultiLineString') g.coordinates.forEach(l => acc.push(l.map(c => [c[0], c[1]])));
-        else if (g.type === 'Polygon') g.coordinates.forEach(r => acc.push(r.map(c => [c[0], c[1]])));
-        else if (g.type === 'MultiPolygon') g.coordinates.forEach(poly => poly.forEach(r => acc.push(r.map(c => [c[0], c[1]]))));
+        // Polygons are area outlines (e.g. state boundaries), not roads — skip them.
         else if (g.type === 'GeometryCollection') (g.geometries || []).forEach(sub => collectLines(sub, acc));
       }
       function collectPoints(g, acc) {
@@ -467,7 +475,7 @@ export default function MapPage({ user }) {
   }
 
   // Group features by project for the sidebar list
-  const byProject = projects.map(p => ({ project: p, items: features.filter(f => f.project === p) }))
+  const byProject = projects.map(p => ({ project: p, items: features.filter(f => f.project === p && !isHidden(f)) }))
     .filter(g => g.items.length || true);
 
   return (
