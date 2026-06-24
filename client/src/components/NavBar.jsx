@@ -277,7 +277,10 @@ export default function NavBar({ user, onLogout }) {
 
             <div className="hidden sm:flex items-center gap-1">
               {user?.role === 'construction' ? (
-                navLink('/construction', 'Construction Progress')
+                <>
+                  {navLink('/construction', 'Construction Progress')}
+                  {navLink('/map', 'Site Map')}
+                </>
               ) : user?.role === 'auditor' ? (
                 navLink('/grv/grievances', 'Grievances Dashboard')
               ) : user?.role === 'submitter' ? (
@@ -306,6 +309,7 @@ export default function NavBar({ user, onLogout }) {
                     ]}
                   />
                   {user?.role === 'admin' && navLink('/construction', 'Construction Progress')}
+                  {navLink('/map', 'Site Map')}
                 </>
               )}
             </div>

@@ -13,6 +13,7 @@ import ResolvingSolutions from './pages/grv/ResolvingSolutions';
 import EsgCalendar from './pages/EsgCalendar';
 import Settings from './pages/Settings';
 import UserAccess from './pages/UserAccess';
+import MapPage from './pages/MapPage';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
             {user.role === 'construction' ? (
               <>
                 <Route path="/construction" element={<ConstructionProgress />} />
+                <Route path="/map"          element={<MapPage user={user} />} />
                 <Route path="/settings"     element={<Settings user={user} />} />
                 <Route path="*"             element={<Navigate to="/construction" />} />
               </>
@@ -71,6 +73,7 @@ export default function App() {
                 <Route path="/timeline"              element={<Timeline />} />
                 <Route path="/esg-calendar"          element={<EsgCalendar user={user} />} />
                 <Route path="/construction"         element={<ConstructionProgress />} />
+                <Route path="/map"                  element={<MapPage user={user} />} />
                 <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />
                 <Route path="/grv/settings"          element={<GrvSettings user={user} />} />
