@@ -49,11 +49,25 @@ const HIDDEN_NAMES = new Set([
 ]);
 const isHidden = (f) => HIDDEN_NAMES.has(String(f.name || '').trim().toLowerCase());
 
-// Deterministic color per project
+// Deterministic color per project (kept for the project legend dot)
 const PROJ_COLORS = ['#FFD400', '#00E0FF', '#FF5D8F', '#7CFF6B', '#FF9F1C', '#B388FF'];
 function colorForProject(project, projects) {
   const i = Math.max(0, projects.indexOf(project));
   return PROJ_COLORS[i % PROJ_COLORS.length];
+}
+
+// Distinct colour per section/road — each feature gets its own stable colour
+// derived from its name, so every alignment is visually separable.
+const SECTION_COLORS = [
+  '#FFD400', '#00E0FF', '#FF5D8F', '#7CFF6B', '#FF9F1C', '#B388FF',
+  '#36D399', '#F87272', '#3ABFF8', '#FBBD23', '#E879F9', '#A3E635',
+  '#FB7185', '#22D3EE', '#FACC15', '#C084FC', '#4ADE80', '#FB923C',
+];
+function colorForFeature(f) {
+  const name = String(f.name || f.id || '');
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return SECTION_COLORS[h % SECTION_COLORS.length];
 }
 
 function fmtDate(iso) {
@@ -98,7 +112,6 @@ export default function MapPage({ user }) {
   const [exaggeration, setExaggeration] = useState(0);
   const [importing, setImporting] = useState(false);
   const [joinPoints, setJoinPoints] = useState(false);
-  const [diag, setDiag] = useState('');
   const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -211,17 +224,9 @@ export default function MapPage({ user }) {
       .map(f => ({
         type: 'Feature',
         geometry: roadGeometry(f.coordinates),
-        properties: { color: f.color || colorForProject(f.project, projects), id: f.id, name: f.name },
+        properties: { color: colorForFeature(f), id: f.id, name: f.name },
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
-    map.once('idle', () => {
-      try {
-        const src = map.querySourceFeatures('roads').length;
-        const rnd = map.queryRenderedFeatures({ layers: ['roads-line'] }).length;
-        const vis = map.getLayoutProperty('roads-line', 'visibility') || 'visible';
-        setDiag(`db:${features.filter(f => f.type === 'road').length} set:${roadFeatures.length} inSource:${src} rendered:${rnd} vis:${vis} pitch:${Math.round(map.getPitch())} z:${map.getZoom().toFixed(1)}`);
-      } catch (e) { setDiag('diag err: ' + e.message); }
-    });
 
     // Auto-frame everything once, the first time features arrive
     if (!fittedRef.current && features.length) {
@@ -243,7 +248,7 @@ export default function MapPage({ user }) {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
     features.filter(f => f.type === 'extraction' && visible[f.project] && !isHidden(f)).forEach(f => {
-      const color = f.color || colorForProject(f.project, projects);
+      const color = colorForFeature(f);
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
       el.innerHTML = `
@@ -642,7 +647,7 @@ export default function MapPage({ user }) {
                     <ul className="divide-y divide-slate-50">
                       {items.map(f => (
                         <li key={f.id} className="flex items-center gap-2 px-3 py-2 group hover:bg-amber-50/40">
-                          <span className="text-sm">{f.type === 'road' ? '🛣️' : '📍'}</span>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/40" style={{ background: colorForFeature(f) }} />
                           <button onClick={() => flyTo(f)} className="flex-1 text-left min-w-0">
                             <p className="text-xs font-semibold text-slate-700 truncate">{f.name}</p>
                             {f.category && <p className="text-[10px] text-red-500 truncate">{f.category}</p>}
@@ -675,11 +680,6 @@ export default function MapPage({ user }) {
         <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[260px]">
           🛰️ Esri World Imagery — newest available, date varies by area. Each pin shows the date you added it.
         </div>
-        {diag && (
-          <div className="absolute bottom-2 left-2 bg-black/75 text-[10px] text-green-300 font-mono px-2 py-1 rounded-md z-10 max-w-[420px]">
-            {diag}
-          </div>
-        )}
       </div>
     </div>
   );
