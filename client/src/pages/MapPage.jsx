@@ -51,6 +51,20 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// A road's coordinates are either a LineString ([[lng,lat],...]) or a
+// MultiLineString ([[[lng,lat],...],...]). Detect by nesting depth.
+function isMultiLine(coords) {
+  return Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0]);
+}
+function roadGeometry(coords) {
+  return isMultiLine(coords)
+    ? { type: 'MultiLineString', coordinates: coords }
+    : { type: 'LineString', coordinates: coords };
+}
+function firstVertex(coords) {
+  return isMultiLine(coords) ? coords[0][0] : coords[0];
+}
+
 export default function MapPage({ user }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -178,7 +192,7 @@ export default function MapPage({ user }) {
       .filter(f => f.type === 'road' && visible[f.project])
       .map(f => ({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: f.coordinates },
+        geometry: roadGeometry(f.coordinates),
         properties: { color: f.color || colorForProject(f.project, projects), id: f.id, name: f.name },
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
@@ -287,36 +301,39 @@ export default function MapPage({ user }) {
       const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
       const geo = kmlToGeoJSON(dom);
 
-      // Recursively flatten any geometry (handles MultiGeometry / GeometryCollection
-      // which is where Google Earth often nests the actual Path/LineString).
+      // Recursively collect all line segments and points from a geometry,
+      // including those nested in MultiGeometry (-> GeometryCollection in togeojson).
+      function collectLines(g, acc) {
+        if (!g) return;
+        if (g.type === 'LineString') acc.push(g.coordinates.map(c => [c[0], c[1]]));
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(l => acc.push(l.map(c => [c[0], c[1]])));
+        else if (g.type === 'Polygon') g.coordinates.forEach(r => acc.push(r.map(c => [c[0], c[1]])));
+        else if (g.type === 'MultiPolygon') g.coordinates.forEach(poly => poly.forEach(r => acc.push(r.map(c => [c[0], c[1]]))));
+        else if (g.type === 'GeometryCollection') (g.geometries || []).forEach(sub => collectLines(sub, acc));
+      }
+      function collectPoints(g, acc) {
+        if (!g) return;
+        if (g.type === 'Point') acc.push([g.coordinates[0], g.coordinates[1]]);
+        else if (g.type === 'MultiPoint') g.coordinates.forEach(c => acc.push([c[0], c[1]]));
+        else if (g.type === 'GeometryCollection') (g.geometries || []).forEach(sub => collectPoints(sub, acc));
+      }
+
+      // Merge all segments within one placemark into a SINGLE road feature
+      // (stored as a MultiLineString-style nested array when there are several).
       const collected = [];
       let unnamed = 0;
-      function pushGeom(g, name, notes) {
-        if (!g) return;
-        if (g.type === 'Point') {
-          collected.push({ type: 'extraction', name, notes, coordinates: [g.coordinates[0], g.coordinates[1]] });
-        } else if (g.type === 'MultiPoint') {
-          g.coordinates.forEach(c => collected.push({ type: 'extraction', name, notes, coordinates: [c[0], c[1]] }));
-        } else if (g.type === 'LineString') {
-          collected.push({ type: 'road', name, notes, coordinates: g.coordinates.map(c => [c[0], c[1]]) });
-        } else if (g.type === 'MultiLineString') {
-          g.coordinates.forEach((line, i) => collected.push({
-            type: 'road', name: g.coordinates.length > 1 ? `${name} (${i + 1})` : name, notes,
-            coordinates: line.map(c => [c[0], c[1]]),
-          }));
-        } else if (g.type === 'Polygon') {
-          collected.push({ type: 'road', name, notes, coordinates: g.coordinates[0].map(c => [c[0], c[1]]) });
-        } else if (g.type === 'GeometryCollection') {
-          (g.geometries || []).forEach(sub => pushGeom(sub, name, notes));
-        }
-      }
       for (const f of geo.features || []) {
         const name = (f.properties?.name || '').trim() || `Imported ${++unnamed}`;
         const notes = (f.properties?.description || '').toString().replace(/<[^>]*>/g, '').trim().slice(0, 500) || null;
-        pushGeom(f.geometry, name, notes);
+        const lines = []; collectLines(f.geometry, lines);
+        const pts = []; collectPoints(f.geometry, pts);
+        if (lines.length) {
+          collected.push({ type: 'road', name, notes, coordinates: lines.length === 1 ? lines[0] : lines });
+        }
+        pts.forEach(p => collected.push({ type: 'extraction', name, notes, coordinates: p }));
       }
 
-      // Optionally connect all imported points (in file order) into a single road.
+      // Optionally connect all imported single points (in file order) into one road.
       let toSave;
       if (joinPoints) {
         const pointCoords = collected.filter(c => c.type === 'extraction').map(c => c.coordinates);
@@ -345,8 +362,8 @@ export default function MapPage({ user }) {
 
       // Fly to the first imported feature
       const first = toSave[0];
-      const center = first.type === 'road' ? first.coordinates[0] : first.coordinates;
-      mapRef.current?.flyTo({ center, zoom: 12, duration: 1500 });
+      const center = first.type === 'road' ? firstVertex(first.coordinates) : first.coordinates;
+      mapRef.current?.flyTo({ center, zoom: 11, duration: 1500 });
     } catch (err) {
       console.error(err);
       flash('Could not read that file. Make sure it is a valid .kmz or .kml.');
@@ -411,8 +428,8 @@ export default function MapPage({ user }) {
 
   function flyTo(f) {
     const map = mapRef.current; if (!map) return;
-    const center = f.type === 'road' ? f.coordinates[Math.floor(f.coordinates.length / 2)] : f.coordinates;
-    map.flyTo({ center, zoom: 13, duration: 1500 });
+    const center = f.type === 'road' ? firstVertex(f.coordinates) : f.coordinates;
+    map.flyTo({ center, zoom: 12, duration: 1500 });
   }
 
   // Group features by project for the sidebar list
