@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import JSZip from 'jszip';
+import { kml as kmlToGeoJSON } from '@tmcw/togeojson';
 import api from '../api';
 
 // Fully-free basemap: ESRI satellite imagery + place-name labels + AWS terrarium DEM. No API key.
@@ -68,6 +70,8 @@ export default function MapPage({ user }) {
   const [lngInput, setLngInput] = useState('');
   const [showLabels, setShowLabels] = useState(true);
   const [exaggeration, setExaggeration] = useState(1.6);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -260,6 +264,74 @@ export default function MapPage({ user }) {
 
   function cancelDraft() { startMode('view'); }
 
+  // ── Import a KMZ/KML file (from Google Earth) ──
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    if (!selProject) { flash('Pick an active project first.'); return; }
+    setImporting(true);
+    try {
+      let kmlText;
+      if (file.name.toLowerCase().endsWith('.kmz')) {
+        const zip = await JSZip.loadAsync(file);
+        // KMZ holds one or more .kml entries; use the first (usually doc.kml)
+        const kmlEntry = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+        if (!kmlEntry) throw new Error('No .kml inside the .kmz');
+        kmlText = await kmlEntry.async('string');
+      } else {
+        kmlText = await file.text();
+      }
+
+      const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
+      const geo = kmlToGeoJSON(dom);
+
+      // Flatten into our road/extraction features
+      const toSave = [];
+      let unnamed = 0;
+      for (const f of geo.features || []) {
+        const g = f.geometry; if (!g) continue;
+        const name = (f.properties?.name || '').trim() || `Imported ${++unnamed}`;
+        const notes = (f.properties?.description || '').toString().replace(/<[^>]*>/g, '').trim().slice(0, 500) || null;
+        if (g.type === 'Point') {
+          toSave.push({ type: 'extraction', name, notes, coordinates: [g.coordinates[0], g.coordinates[1]] });
+        } else if (g.type === 'LineString') {
+          toSave.push({ type: 'road', name, notes, coordinates: g.coordinates.map(c => [c[0], c[1]]) });
+        } else if (g.type === 'MultiLineString') {
+          g.coordinates.forEach((line, i) => toSave.push({
+            type: 'road', name: g.coordinates.length > 1 ? `${name} (${i + 1})` : name, notes,
+            coordinates: line.map(c => [c[0], c[1]]),
+          }));
+        } else if (g.type === 'Polygon') {
+          // Treat outer ring as a closed road outline
+          toSave.push({ type: 'road', name, notes, coordinates: g.coordinates[0].map(c => [c[0], c[1]]) });
+        }
+      }
+
+      if (!toSave.length) { flash('No roads or points found in that file.'); setImporting(false); return; }
+
+      const color = colorForProject(selProject, projects);
+      let ok = 0;
+      for (const feat of toSave) {
+        try {
+          await api.post('/map', { project: selProject, color, ...feat });
+          ok++;
+        } catch { /* skip individual failures */ }
+      }
+      flash(`✓ Imported ${ok} feature${ok !== 1 ? 's' : ''} into ${selProject}.`);
+      await load();
+
+      // Fly to the first imported feature
+      const first = toSave[0];
+      const center = first.type === 'road' ? first.coordinates[0] : first.coordinates;
+      mapRef.current?.flyTo({ center, zoom: 12, duration: 1500 });
+    } catch (err) {
+      console.error(err);
+      flash('Could not read that file. Make sure it is a valid .kmz or .kml.');
+    }
+    setImporting(false);
+  }
+
   function parsePastedCoords() {
     // Accept "lng,lat" or "lat,lng"? We assume "lng, lat" per line. Also tolerate spaces/tabs.
     const coords = pasteText.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -353,15 +425,23 @@ export default function MapPage({ user }) {
             <div>
               <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Add to map</label>
               {mode === 'view' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => startMode('road')}
-                    className="px-3 py-2 text-xs font-bold bg-[#1a3c5e] text-white rounded-lg hover:bg-[#122d47] transition-colors">
-                    ✏️ Draw Road
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => startMode('road')}
+                      className="px-3 py-2 text-xs font-bold bg-[#1a3c5e] text-white rounded-lg hover:bg-[#122d47] transition-colors">
+                      ✏️ Draw Road
+                    </button>
+                    <button onClick={() => startMode('extraction')}
+                      className="px-3 py-2 text-xs font-bold bg-[#e63946] text-white rounded-lg hover:bg-[#c92a37] transition-colors">
+                      📍 Extraction
+                    </button>
+                  </div>
+                  <input ref={fileInputRef} type="file" accept=".kmz,.kml" onChange={handleImportFile} className="hidden" />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={importing}
+                    className="w-full px-3 py-2 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50">
+                    {importing ? 'Importing…' : '🌍 Import KMZ / KML (Google Earth)'}
                   </button>
-                  <button onClick={() => startMode('extraction')}
-                    className="px-3 py-2 text-xs font-bold bg-[#e63946] text-white rounded-lg hover:bg-[#c92a37] transition-colors">
-                    📍 Extraction
-                  </button>
+                  <p className="text-[10px] text-slate-400 text-center">Imports into the active project above</p>
                 </div>
               )}
 
