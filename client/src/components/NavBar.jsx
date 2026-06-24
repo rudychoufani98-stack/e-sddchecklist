@@ -290,25 +290,25 @@ export default function NavBar({ user, onLogout }) {
                 </>
               ) : (
                 <>
+                  {user?.role === 'admin' && navLink('/construction', 'Construction Progress')}
                   <DropdownMenu
-                    label="ESG Tracker"
+                    label="ESG Check-list"
                     items={[
                       { path: '/',             label: 'Dashboard' },
+                      { path: '/data-room',    label: 'Data Room' },
                       { path: '/esg-calendar', label: 'ESG Calendar' },
                       { path: '/timeline',     label: 'Timeline' },
-                      { path: '/data-room',    label: 'Data Room' },
                     ]}
                   />
                   <DropdownMenu
-                    label="ESG Data Collection"
+                    label="External Grievances"
                     items={[
-                      { path: '/grv/grievances',           label: 'External Grievances' },
+                      { path: '/grv/grievances',           label: 'Grievances Dashboard' },
+                      { path: '/grv/settings',             label: 'Project Settings' },
                       { path: '/grv/resolving-solutions',  label: 'Resolving Solutions' },
                       { path: '/grv/submit',               label: 'Submit Grievance' },
-                      { path: '/grv/settings',             label: 'Project Settings' },
                     ]}
                   />
-                  {user?.role === 'admin' && navLink('/construction', 'Construction Progress')}
                   {navLink('/map', 'Site Map')}
                 </>
               )}

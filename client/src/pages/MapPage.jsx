@@ -44,6 +44,11 @@ function colorForProject(project, projects) {
   return PROJ_COLORS[i % PROJ_COLORS.length];
 }
 
+function fmtDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function MapPage({ user }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -193,6 +198,7 @@ export default function MapPage({ user }) {
            ${f.category ? `<div style="color:#e63946;font-weight:600;font-size:11px">${f.category}</div>` : ''}
            ${f.notes ? `<div style="color:#555;margin-top:4px">${f.notes}</div>` : ''}
            <div style="color:#999;margin-top:4px;font-size:10px">${f.coordinates[1].toFixed(5)}, ${f.coordinates[0].toFixed(5)}</div>
+           ${f.created_at ? `<div style="color:#999;margin-top:2px;font-size:10px">📅 Added ${fmtDate(f.created_at)}${f.created_by ? ` · ${f.created_by}` : ''}</div>` : ''}
          </div>`
       );
       const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
@@ -475,6 +481,7 @@ export default function MapPage({ user }) {
                           <button onClick={() => flyTo(f)} className="flex-1 text-left min-w-0">
                             <p className="text-xs font-semibold text-slate-700 truncate">{f.name}</p>
                             {f.category && <p className="text-[10px] text-red-500 truncate">{f.category}</p>}
+                            {f.created_at && <p className="text-[10px] text-slate-400 truncate">📅 {fmtDate(f.created_at)}</p>}
                           </button>
                           {canEdit && (
                             <button onClick={() => deleteFeature(f)}
@@ -500,6 +507,9 @@ export default function MapPage({ user }) {
             {mode === 'road' ? '✏️ Drawing road — click to add points' : '📍 Click to place extraction site'}
           </div>
         )}
+        <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[260px]">
+          🛰️ Esri World Imagery — newest available, date varies by area. Each pin shows the date you added it.
+        </div>
       </div>
     </div>
   );
