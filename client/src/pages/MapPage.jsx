@@ -97,14 +97,12 @@ export default function MapPage({ user }) {
 
   // ── Load projects + features ──
   const load = useCallback(async () => {
+    // Load projects independently so the picker still works even if the
+    // map_features table doesn't exist yet (the /map call would otherwise fail).
     try {
-      const [rStruct, rFeat] = await Promise.all([
-        api.get('/construction/structure'),
-        api.get('/map'),
-      ]);
+      const rStruct = await api.get('/construction/structure');
       const projs = rStruct.data.projects || [];
       setProjects(projs);
-      setFeatures(rFeat.data);
       setVisible(prev => {
         const v = { ...prev };
         projs.forEach(p => { if (v[p] === undefined) v[p] = true; });
@@ -112,6 +110,14 @@ export default function MapPage({ user }) {
       });
       setSelProject(s => s || projs[0] || '');
     } catch (e) { /* ignore */ }
+
+    try {
+      const rFeat = await api.get('/map');
+      setFeatures(rFeat.data);
+    } catch (e) {
+      setFeatures([]);
+      flash('Map storage not set up yet — run the map_features SQL in Supabase to save features.');
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
