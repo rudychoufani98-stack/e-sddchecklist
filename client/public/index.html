@@ -7,6 +7,9 @@
     <link rel="shortcut icon" href="/favicon.svg" />
     <title>Skykapital — E&amp;S Due Diligence Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MapLibre loaded from CDN so the app bundler never mangles its web worker -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
     <script>
       tailwind.config = {
         theme: {

@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import JSZip from 'jszip';
 import { kml as kmlToGeoJSON } from '@tmcw/togeojson';
 import api from '../api';
+
+// MapLibre is loaded from CDN in public/index.html (window.maplibregl) so that
+// Create React App's minifier never mangles MapLibre's web worker — bundling it
+// breaks GeoJSON tiling, which silently stops vector layers (roads) from drawing.
+const maplibregl = window.maplibregl;
 
 // Fully-free basemap: ESRI satellite imagery + place-name labels + AWS terrarium DEM. No API key.
 const MAP_STYLE = {
