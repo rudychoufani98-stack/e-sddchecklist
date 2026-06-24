@@ -131,6 +131,7 @@ export default function MapPage({ user }) {
   // Construction link: colorMode 'section' (per-road colours) or 'progress' (by % complete)
   const [colorMode, setColorMode] = useState('section');
   const [sections, setSections] = useState([]); // [{ label, avg }] from construction data
+  const [view, setView] = useState('map'); // 'map' | 'table'
 
   const canEdit = user?.role === 'admin' || user?.role === 'construction';
 
@@ -177,6 +178,14 @@ export default function MapPage({ user }) {
     } catch (e) { /* construction may be empty */ }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // When returning to the map tab, MapLibre needs a resize (its container was hidden)
+  useEffect(() => {
+    if (view === 'map' && mapRef.current) {
+      const t = setTimeout(() => mapRef.current && mapRef.current.resize(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [view]);
 
   // ── Init map once ──
   useEffect(() => {
@@ -554,8 +563,76 @@ export default function MapPage({ user }) {
   const byProject = projects.map(p => ({ project: p, items: features.filter(f => f.project === p && !isHidden(f)) }))
     .filter(g => g.items.length || true);
 
+  // All real (non-junk) extraction sites, for the table
+  const extractionRows = features.filter(f => f.type === 'extraction' && !isHidden(f));
+
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-[#FDF6E3]">
+    <div className="h-[calc(100vh-64px)] flex flex-col bg-[#FDF6E3]">
+      {/* ── Tab bar ── */}
+      <div className="flex items-center gap-1 px-4 py-2 bg-white border-b border-amber-100 flex-shrink-0">
+        <button onClick={() => setView('map')}
+          className={`px-4 py-1.5 text-sm font-bold rounded-lg ${view === 'map' ? 'bg-[#1a3c5e] text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+          🗺️ Map
+        </button>
+        <button onClick={() => setView('table')}
+          className={`px-4 py-1.5 text-sm font-bold rounded-lg ${view === 'table' ? 'bg-[#1a3c5e] text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+          📋 Extraction Sites{extractionRows.length ? ` (${extractionRows.length})` : ''}
+        </button>
+      </div>
+
+      {/* ── Extraction table view ── */}
+      <div className={`flex-1 overflow-auto p-6 ${view === 'table' ? 'block' : 'hidden'}`}>
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-xl font-black text-[#1a3c5e] mb-1">Extraction Sites</h2>
+          <p className="text-sm text-slate-500 mb-4">{extractionRows.length} site{extractionRows.length !== 1 ? 's' : ''} · click 📍 to locate on the map, ✕ to delete</p>
+          {extractionRows.length === 0 ? (
+            <div className="bg-white border border-amber-100 rounded-2xl p-10 text-center text-slate-400">
+              No extraction sites yet. Switch to the Map tab, click <b>📍 Extraction</b>, and place one.
+            </div>
+          ) : (
+            <div className="bg-white border border-amber-100 rounded-2xl overflow-hidden shadow-sm">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-left">
+                    {['Site', 'Project', 'Category', 'Notes', 'Coordinates', 'Added', ''].map(h => (
+                      <th key={h} className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {extractionRows.map(f => (
+                    <tr key={f.id} className="hover:bg-amber-50/30">
+                      <td className="px-4 py-3 font-semibold text-slate-800">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: colorForFeature(f) }} />{f.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{f.project}</td>
+                      <td className="px-4 py-3">{f.category
+                        ? <span className="px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-600 rounded-full">{f.category}</span>
+                        : <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3 text-slate-500 max-w-[220px]">{f.notes || <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3 text-slate-500 font-mono text-xs whitespace-nowrap">{f.coordinates[1].toFixed(5)}, {f.coordinates[0].toFixed(5)}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(f.created_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button onClick={() => { setView('map'); setTimeout(() => flyTo(f), 100); }}
+                          className="px-2 py-1 text-xs font-semibold text-[#1a3c5e] hover:bg-blue-50 rounded mr-1" title="Locate on map">📍</button>
+                        {canEdit && (
+                          <button onClick={() => deleteFeature(f)}
+                            className="px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 rounded" title="Delete">✕</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Map view (kept mounted; hidden when on table so MapLibre persists) ── */}
+      <div className={`flex-1 min-h-0 ${view === 'map' ? 'flex' : 'hidden'}`}>
       {/* ── Sidebar ── */}
       <div className="w-80 flex-shrink-0 bg-white border-r border-amber-100 flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100">
@@ -793,6 +870,7 @@ export default function MapPage({ user }) {
         <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[260px]">
           🛰️ Esri World Imagery — newest available, date varies by area. Each pin shows the date you added it.
         </div>
+      </div>
       </div>
     </div>
   );
