@@ -142,15 +142,7 @@ export default function MapPage({ user }) {
 
     map.on('load', () => {
       // Terrain stays OFF by default so line layers render reliably (draped terrain
-      // hides GeoJSON lines in MapLibre); hillshade still gives relief. The 3D slider
-      // turns on true draped terrain when the user wants it.
-      try {
-        map.setSky({
-          'sky-color': '#5a8fcf', 'horizon-color': '#cfe0f2',
-          'fog-color': '#eaf1f9', 'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.6,
-          'fog-ground-blend': 0.3, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 0.4, 13, 0.1],
-        });
-      } catch { /* older versions */ }
+      // hides GeoJSON lines in MapLibre). The 3D slider turns on true terrain on demand.
 
       // GeoJSON source for roads
       map.addSource('roads', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -163,7 +155,7 @@ export default function MapPage({ user }) {
       map.addLayer({
         id: 'roads-line', type: 'line', source: 'roads',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#ff1744', 'line-width': 6, 'line-opacity': 1 },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 1 },
       });
       // Draft road (dashed, while drawing)
       map.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -174,7 +166,7 @@ export default function MapPage({ user }) {
       });
       map.addLayer({
         id: 'draft-points', type: 'circle', source: 'draft',
-        filter: ['==', '$type', 'Point'],
+        filter: ['==', ['geometry-type'], 'Point'],
         paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#1a3c5e', 'circle-stroke-width': 2 },
       });
       setMapReady(true);
