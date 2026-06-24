@@ -104,8 +104,8 @@ export default function MapPage({ user }) {
       style: MAP_STYLE,
       center: [6.5, 8.5], // Nigeria
       zoom: 5.3,
-      pitch: 60,
-      bearing: -20,
+      pitch: 0,      // top-down sky view by default; right-drag to tilt into 3D
+      bearing: 0,
       maxPitch: 85,
     });
     mapRef.current = map;
@@ -255,7 +255,7 @@ export default function MapPage({ user }) {
   }
 
   function flyToDraftPoint() {
-    if (draftPoint) mapRef.current?.flyTo({ center: draftPoint, zoom: 14, pitch: 60, duration: 1500 });
+    if (draftPoint) mapRef.current?.flyTo({ center: draftPoint, zoom: 14, duration: 1500 });
   }
 
   function cancelDraft() { startMode('view'); }
@@ -318,7 +318,7 @@ export default function MapPage({ user }) {
   function flyTo(f) {
     const map = mapRef.current; if (!map) return;
     const center = f.type === 'road' ? f.coordinates[Math.floor(f.coordinates.length / 2)] : f.coordinates;
-    map.flyTo({ center, zoom: 13, pitch: 65, duration: 1500 });
+    map.flyTo({ center, zoom: 13, duration: 1500 });
   }
 
   // Group features by project for the sidebar list
