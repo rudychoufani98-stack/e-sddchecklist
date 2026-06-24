@@ -143,7 +143,7 @@ export default function MapPage({ user }) {
   const [sections, setSections] = useState([]); // [{ label, avg }] from construction data
   const [view, setView] = useState('map'); // 'map' | 'table'
 
-  const canEdit = user?.role === 'admin' || user?.role === 'construction';
+  const canEdit = user?.role === 'admin' || user?.role === 'construction' || user?.role === 'consultant';
 
   // Refs to read latest state inside the map click handler (avoids stale closure)
   const modeRef = useRef(mode);   useEffect(() => { modeRef.current = mode; }, [mode]);

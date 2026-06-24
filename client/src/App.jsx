@@ -45,7 +45,13 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            {user.role === 'construction' ? (
+            {user.role === 'consultant' ? (
+              <>
+                <Route path="/map"      element={<MapPage user={user} />} />
+                <Route path="/settings" element={<Settings user={user} />} />
+                <Route path="*"         element={<Navigate to="/map" />} />
+              </>
+            ) : user.role === 'construction' ? (
               <>
                 <Route path="/construction" element={<ConstructionProgress />} />
                 <Route path="/map"          element={<MapPage user={user} />} />

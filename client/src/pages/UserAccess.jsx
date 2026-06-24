@@ -9,6 +9,7 @@ const ROLES = [
   { value: 'submitter',    label: 'Grievance Submitter' },
   { value: 'auditor',      label: 'Auditor (Lender)' },
   { value: 'construction', label: 'Construction Progress' },
+  { value: 'consultant',   label: 'Consultant' },
 ];
 const roleBadge = {
   admin:        'bg-[#1a3c5e] text-white',
@@ -16,6 +17,7 @@ const roleBadge = {
   submitter:    'bg-amber-100 text-amber-700',
   auditor:      'bg-purple-100 text-purple-700',
   construction: 'bg-green-100 text-green-700',
+  consultant:   'bg-teal-100 text-teal-700',
 };
 
 export default function UserAccess({ user }) {
@@ -178,6 +180,11 @@ export default function UserAccess({ user }) {
         {nu.role === 'construction' && (
           <p className="mt-3 text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
             🏗️ Construction accounts see <strong>only the Construction Progress tab</strong>, read-only.
+          </p>
+        )}
+        {nu.role === 'consultant' && (
+          <p className="mt-3 text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+            🧭 Consultant accounts see <strong>only the Site Map</strong>. They can add/edit roads and extraction sites (environmental, social, cultural heritage…) but cannot access other tabs.
           </p>
         )}
       </div>

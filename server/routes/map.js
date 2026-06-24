@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
 // POST create a feature (admin or construction roles)
 router.post('/', async (req, res) => {
   try {
-    if (!['admin', 'construction'].includes(req.user?.role))
+    if (!['admin', 'construction', 'consultant'].includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
 
     let { project, type, name, category, notes, color, coordinates } = req.body;
@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
 // PATCH update a feature
 router.patch('/:id', async (req, res) => {
   try {
-    if (!['admin', 'construction'].includes(req.user?.role))
+    if (!['admin', 'construction', 'consultant'].includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
     const allowed = ['project', 'type', 'name', 'category', 'notes', 'color', 'coordinates'];
     const payload = { updated_at: new Date().toISOString() };
@@ -74,7 +74,7 @@ router.patch('/:id', async (req, res) => {
 // DELETE a feature
 router.delete('/:id', async (req, res) => {
   try {
-    if (!['admin', 'construction'].includes(req.user?.role))
+    if (!['admin', 'construction', 'consultant'].includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
     const { error } = await supabase.from('map_features').delete().eq('id', req.params.id);
     if (error) throw error;

@@ -44,7 +44,7 @@ router.post('/change-password', async (req, res) => {
 // ===== Owner-only user management below =====
 router.use(requireOwner);
 
-const ROLES = ['admin', 'viewer', 'submitter', 'auditor', 'construction'];
+const ROLES = ['admin', 'viewer', 'submitter', 'auditor', 'construction', 'consultant'];
 
 // GET all users (no password hashes)
 router.get('/', async (req, res) => {
