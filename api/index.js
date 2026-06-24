@@ -43,6 +43,7 @@ app.use('/api/construction', require('../server/routes/construction'));
 app.use('/api/users',        require('../server/routes/users'));
 app.use('/api/esg-calendar', require('../server/routes/esg-calendar'));
 app.use('/api/map',          require('../server/routes/map'));
+app.use('/api/chat',         require('../server/routes/chat'));
 
 // Serve React build
 const buildDir = path.join(__dirname, '../client/build');

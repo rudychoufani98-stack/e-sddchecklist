@@ -12,6 +12,127 @@ function fmtShort(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
+function fmtMsgTime(iso) {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Shared team chat — available to every signed-in user
+function ChatWidget({ user }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [lastSeen, setLastSeen] = useState(() => Number(localStorage.getItem('chatLastSeen') || 0));
+  const ref = useRef(null);
+  const bodyRef = useRef(null);
+
+  const fetchMsgs = () => api.get('/chat')
+    .then(r => { setMessages(r.data); setUnavailable(false); })
+    .catch(err => { if (err.response?.status === 500) setUnavailable(true); });
+
+  useEffect(() => {
+    fetchMsgs();
+    // light background poll so the unread dot stays fresh; faster when open
+    const t = setInterval(fetchMsgs, open ? 4000 : 20000);
+    return () => clearInterval(t);
+  }, [open]);
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      const newest = messages.length ? new Date(messages[messages.length - 1].created_at).getTime() : 0;
+      setLastSeen(newest);
+      localStorage.setItem('chatLastSeen', String(newest));
+      setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, 50);
+    }
+  }, [open, messages]);
+
+  const unread = messages.filter(m => new Date(m.created_at).getTime() > lastSeen && m.username !== user?.username).length;
+
+  async function send() {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    try {
+      await api.post('/chat', { body });
+      setText('');
+      await fetchMsgs();
+      setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, 50);
+    } catch {}
+    setSending(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className="relative p-2 rounded-lg hover:bg-white/10 transition-colors" aria-label="Team chat">
+        <svg className="w-5 h-5 text-blue-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.2A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        {unread > 0 && (
+          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 bg-[#e63946] text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-[#1a3c5e]">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 z-50 w-[360px] max-w-[92vw] flex flex-col" style={{ height: '70vh', maxHeight: 520 }}>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-800">Team chat</p>
+            <span className="text-xs text-gray-400">{messages.length} messages</span>
+          </div>
+
+          <div ref={bodyRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 bg-gray-50/40">
+            {unavailable ? (
+              <div className="text-center text-sm text-amber-600 px-4 py-8">
+                Chat isn’t set up yet — the <code>messages</code> table needs to be created in Supabase.
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center text-sm text-gray-400 px-4 py-8">No messages yet. Say hello 👋</div>
+            ) : messages.map(m => {
+              const mine = m.username === user?.username;
+              return (
+                <div key={m.id} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                  {!mine && <span className="text-[10px] font-semibold text-gray-500 mb-0.5 px-1">{m.username}</span>}
+                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${mine ? 'bg-[#1a3c5e] text-white rounded-br-sm' : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm'}`}>
+                    <span className="whitespace-pre-wrap break-words">{m.body}</span>
+                  </div>
+                  <span className="text-[9px] text-gray-400 mt-0.5 px-1">{fmtMsgTime(m.created_at)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {!unavailable && (
+            <div className="p-2.5 border-t border-gray-100 flex items-end gap-2">
+              <textarea value={text} onChange={e => setText(e.target.value)} rows={1}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder="Type a message…"
+                className="flex-1 resize-none px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] max-h-24" />
+              <button onClick={send} disabled={sending || !text.trim()}
+                className="px-3 py-2 bg-[#1a3c5e] text-white text-sm font-bold rounded-xl hover:bg-[#122d47] disabled:opacity-40 transition-colors">
+                Send
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState([]);
@@ -327,6 +448,7 @@ export default function NavBar({ user, onLogout }) {
           {/* Reminders + Profile dropdown */}
           <div className="flex items-center gap-1.5">
             {(user?.role === 'admin' || user?.role === 'viewer') && <NotificationBell />}
+            <ChatWidget user={user} />
             <ProfileMenu user={user} initials={initials} roleLabel={roleLabel} onLogout={handleLogout} />
           </div>
         </div>
