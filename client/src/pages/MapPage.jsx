@@ -133,6 +133,9 @@ export default function MapPage({ user }) {
   // 0 = flat top-down (lines render reliably via hillshade relief).
   // >0 = true draped 3D terrain (tilt to see it).
   const [exaggeration, setExaggeration] = useState(0);
+  // Imagery: 'esri' (latest mosaic) or an Esri Wayback release number (dated snapshot)
+  const [imagery, setImagery] = useState('esri');
+  const [wayback, setWayback] = useState([]); // [{ num, date }] newest first
   const [importing, setImporting] = useState(false);
   const [joinPoints, setJoinPoints] = useState(false);
   const fileInputRef = useRef(null);
@@ -195,6 +198,30 @@ export default function MapPage({ user }) {
     } catch (e) { /* construction may be empty */ }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Load the Esri Wayback release list (dated imagery snapshots)
+  useEffect(() => {
+    fetch('https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json')
+      .then(r => r.json())
+      .then(cfg => {
+        const list = Object.entries(cfg).map(([num, v]) => {
+          const m = (v.itemTitle || '').match(/(\d{4}-\d{2}-\d{2})/);
+          return { num: Number(num), date: m ? m[1] : '' };
+        }).filter(x => x.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40);
+        setWayback(list);
+      }).catch(() => {});
+  }, []);
+
+  // Swap the satellite basemap tiles when imagery selection changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getSource('satellite')) return;
+    const src = map.getSource('satellite');
+    const url = imagery === 'esri'
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+      : `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/${imagery}/{z}/{y}/{x}`;
+    if (src.setTiles) src.setTiles([url]);
+  }, [imagery, mapReady]);
 
   // When returning to the map tab, MapLibre needs a resize (its container was hidden)
   useEffect(() => {
@@ -802,6 +829,18 @@ export default function MapPage({ user }) {
               <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} />
               Show city & country names
             </label>
+            {/* Imagery date picker (Esri Wayback) */}
+            <div className="mb-3">
+              <p className="text-[10px] text-slate-500 mb-0.5">Satellite imagery</p>
+              <select value={imagery} onChange={e => setImagery(e.target.value === 'esri' ? 'esri' : Number(e.target.value))}
+                className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white">
+                <option value="esri">Latest available (Esri)</option>
+                {wayback.map(w => <option key={w.num} value={w.num}>📅 {w.date}</option>)}
+              </select>
+              {imagery !== 'esri' && (
+                <p className="text-[10px] text-slate-400 mt-0.5">Showing imagery captured {wayback.find(w => w.num === imagery)?.date}</p>
+              )}
+            </div>
             <div className="mb-3">
               <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
                 <span>3D terrain intensity</span><span>{exaggeration.toFixed(1)}×</span>
@@ -900,8 +939,10 @@ export default function MapPage({ user }) {
             {mode === 'road' ? '✏️ Drawing road — click to add points' : '📍 Click to place extraction site'}
           </div>
         )}
-        <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[260px]">
-          🛰️ Esri World Imagery — newest available, date varies by area. Each pin shows the date you added it.
+        <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[280px]">
+          {imagery === 'esri'
+            ? '🛰️ Esri World Imagery — latest available, date varies by area. Pick a date in Display → Satellite imagery.'
+            : `🛰️ Esri Wayback — imagery captured ${wayback.find(w => w.num === imagery)?.date || ''}`}
         </div>
       </div>
       </div>
