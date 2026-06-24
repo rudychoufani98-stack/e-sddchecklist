@@ -83,7 +83,9 @@ export default function MapPage({ user }) {
   const [latInput, setLatInput] = useState('');
   const [lngInput, setLngInput] = useState('');
   const [showLabels, setShowLabels] = useState(true);
-  const [exaggeration, setExaggeration] = useState(1.6);
+  // 0 = flat top-down (lines render reliably via hillshade relief).
+  // >0 = true draped 3D terrain (tilt to see it).
+  const [exaggeration, setExaggeration] = useState(0);
   const [importing, setImporting] = useState(false);
   const [joinPoints, setJoinPoints] = useState(false);
   const fileInputRef = useRef(null);
@@ -94,6 +96,7 @@ export default function MapPage({ user }) {
 
   // Refs to read latest state inside the map click handler (avoids stale closure)
   const modeRef = useRef(mode);   useEffect(() => { modeRef.current = mode; }, [mode]);
+  const fittedRef = useRef(false);
 
   // ── Load projects + features ──
   const load = useCallback(async () => {
@@ -139,8 +142,9 @@ export default function MapPage({ user }) {
     map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 
     map.on('load', () => {
-      // 3D terrain
-      map.setTerrain({ source: 'terrainDEM', exaggeration: 1.6 });
+      // Terrain stays OFF by default so line layers render reliably (draped terrain
+      // hides GeoJSON lines in MapLibre); hillshade still gives relief. The 3D slider
+      // turns on true draped terrain when the user wants it.
       try {
         map.setSky({
           'sky-color': '#5a8fcf', 'horizon-color': '#cfe0f2',
@@ -148,14 +152,19 @@ export default function MapPage({ user }) {
           'fog-ground-blend': 0.3, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 0.4, 13, 0.1],
         });
       } catch { /* older versions */ }
-      map.addControl(new maplibregl.TerrainControl({ source: 'terrainDEM', exaggeration: 1.6 }), 'top-right');
 
       // GeoJSON source for roads
       map.addSource('roads', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      // White casing underneath for contrast on satellite imagery
+      map.addLayer({
+        id: 'roads-casing', type: 'line', source: 'roads',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.6 },
+      });
       map.addLayer({
         id: 'roads-line', type: 'line', source: 'roads',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.9 },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 1 },
       });
       // Draft road (dashed, while drawing)
       map.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -202,6 +211,18 @@ export default function MapPage({ user }) {
         properties: { color: f.color || colorForProject(f.project, projects), id: f.id, name: f.name },
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
+
+    // Auto-frame everything once, the first time features arrive
+    if (!fittedRef.current && features.length) {
+      fittedRef.current = true;
+      const bounds = new maplibregl.LngLatBounds();
+      features.forEach(f => {
+        if (f.type === 'extraction') bounds.extend(f.coordinates);
+        else if (isMultiLine(f.coordinates)) f.coordinates.forEach(line => line.forEach(c => bounds.extend(c)));
+        else f.coordinates.forEach(c => bounds.extend(c));
+      });
+      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, duration: 1200, maxZoom: 12 });
+    }
   }, [features, visible, projects, mapReady]);
 
   // ── Render extraction markers ──
@@ -254,11 +275,16 @@ export default function MapPage({ user }) {
     map.setLayoutProperty('places', 'visibility', showLabels ? 'visible' : 'none');
   }, [showLabels, mapReady]);
 
-  // Terrain exaggeration slider
+  // Terrain exaggeration slider — 0 keeps terrain off so lines stay visible
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    map.setTerrain({ source: 'terrainDEM', exaggeration });
+    if (exaggeration > 0) {
+      map.setTerrain({ source: 'terrainDEM', exaggeration });
+      if (map.getPitch() < 10) map.easeTo({ pitch: 55, duration: 800 });
+    } else {
+      map.setTerrain(null);
+    }
   }, [exaggeration, mapReady]);
 
   // When typing manual coordinates for an extraction point, place + fly to it
