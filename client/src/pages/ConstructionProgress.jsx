@@ -117,10 +117,22 @@ export default function ConstructionProgress() {
   }, [epPeriod, epProject, allData]);
 
   // Derived data for dashboard (period + project filters only)
-  const dashData = allData.filter(r =>
+  const dashDataRaw = allData.filter(r =>
     (!selPeriod  || r.reporting_period === selPeriod) &&
     (!selProject || r.project === selProject)
   );
+
+  // When no specific period is selected, collapse to the LATEST value per
+  // project/sub-section/component so the section %, overall, and KPIs match
+  // what the matrix shows (otherwise older months drag the averages down).
+  const dashData = selPeriod ? dashDataRaw : (() => {
+    const latest = {};
+    dashDataRaw.forEach(r => {
+      const k = `${r.project}||${r.sub_section}||${r.component}`;
+      if (!latest[k] || (r.reporting_period || '') > (latest[k].reporting_period || '')) latest[k] = r;
+    });
+    return Object.values(latest);
+  })();
 
   // Global KPI summary across the filtered set (latest value per project/sub/component when no period)
   const filledAll  = dashData.filter(r => r.pct_progress !== null);
