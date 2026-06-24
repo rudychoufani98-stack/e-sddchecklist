@@ -71,6 +71,7 @@ export default function MapPage({ user }) {
   const [showLabels, setShowLabels] = useState(true);
   const [exaggeration, setExaggeration] = useState(1.6);
   const [importing, setImporting] = useState(false);
+  const [joinPoints, setJoinPoints] = useState(false);
   const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -286,26 +287,47 @@ export default function MapPage({ user }) {
       const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
       const geo = kmlToGeoJSON(dom);
 
-      // Flatten into our road/extraction features
-      const toSave = [];
+      // Recursively flatten any geometry (handles MultiGeometry / GeometryCollection
+      // which is where Google Earth often nests the actual Path/LineString).
+      const collected = [];
       let unnamed = 0;
-      for (const f of geo.features || []) {
-        const g = f.geometry; if (!g) continue;
-        const name = (f.properties?.name || '').trim() || `Imported ${++unnamed}`;
-        const notes = (f.properties?.description || '').toString().replace(/<[^>]*>/g, '').trim().slice(0, 500) || null;
+      function pushGeom(g, name, notes) {
+        if (!g) return;
         if (g.type === 'Point') {
-          toSave.push({ type: 'extraction', name, notes, coordinates: [g.coordinates[0], g.coordinates[1]] });
+          collected.push({ type: 'extraction', name, notes, coordinates: [g.coordinates[0], g.coordinates[1]] });
+        } else if (g.type === 'MultiPoint') {
+          g.coordinates.forEach(c => collected.push({ type: 'extraction', name, notes, coordinates: [c[0], c[1]] }));
         } else if (g.type === 'LineString') {
-          toSave.push({ type: 'road', name, notes, coordinates: g.coordinates.map(c => [c[0], c[1]]) });
+          collected.push({ type: 'road', name, notes, coordinates: g.coordinates.map(c => [c[0], c[1]]) });
         } else if (g.type === 'MultiLineString') {
-          g.coordinates.forEach((line, i) => toSave.push({
+          g.coordinates.forEach((line, i) => collected.push({
             type: 'road', name: g.coordinates.length > 1 ? `${name} (${i + 1})` : name, notes,
             coordinates: line.map(c => [c[0], c[1]]),
           }));
         } else if (g.type === 'Polygon') {
-          // Treat outer ring as a closed road outline
-          toSave.push({ type: 'road', name, notes, coordinates: g.coordinates[0].map(c => [c[0], c[1]]) });
+          collected.push({ type: 'road', name, notes, coordinates: g.coordinates[0].map(c => [c[0], c[1]]) });
+        } else if (g.type === 'GeometryCollection') {
+          (g.geometries || []).forEach(sub => pushGeom(sub, name, notes));
         }
+      }
+      for (const f of geo.features || []) {
+        const name = (f.properties?.name || '').trim() || `Imported ${++unnamed}`;
+        const notes = (f.properties?.description || '').toString().replace(/<[^>]*>/g, '').trim().slice(0, 500) || null;
+        pushGeom(f.geometry, name, notes);
+      }
+
+      // Optionally connect all imported points (in file order) into a single road.
+      let toSave;
+      if (joinPoints) {
+        const pointCoords = collected.filter(c => c.type === 'extraction').map(c => c.coordinates);
+        const realRoads = collected.filter(c => c.type === 'road');
+        toSave = [...realRoads];
+        if (pointCoords.length >= 2) {
+          const baseName = file.name.replace(/\.(kmz|kml)$/i, '');
+          toSave.push({ type: 'road', name: baseName || 'Imported road', notes: null, coordinates: pointCoords });
+        }
+      } else {
+        toSave = collected;
       }
 
       if (!toSave.length) { flash('No roads or points found in that file.'); setImporting(false); return; }
@@ -441,6 +463,10 @@ export default function MapPage({ user }) {
                     className="w-full px-3 py-2 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50">
                     {importing ? 'Importing…' : '🌍 Import KMZ / KML (Google Earth)'}
                   </button>
+                  <label className="flex items-start gap-2 text-[11px] text-slate-600 cursor-pointer bg-green-50 border border-green-100 rounded-lg px-2.5 py-2">
+                    <input type="checkbox" checked={joinPoints} onChange={e => setJoinPoints(e.target.checked)} className="mt-0.5" />
+                    <span><b>Connect points into one road.</b> Use this if your file is a series of pins along a route instead of a drawn path.</span>
+                  </label>
                   <p className="text-[10px] text-slate-400 text-center">Imports into the active project above</p>
                 </div>
               )}
