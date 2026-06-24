@@ -72,6 +72,17 @@ function colorForFeature(f) {
   return SECTION_COLORS[h % SECTION_COLORS.length];
 }
 
+// Red → amber → green by construction % complete
+function progressColor(pct) {
+  if (pct == null) return '#9ca3af';        // gray = not linked / no data
+  if (pct >= 80) return '#22c55e';           // green
+  if (pct >= 50) return '#84cc16';           // lime
+  if (pct >= 25) return '#f59e0b';           // amber
+  return '#ef4444';                          // red
+}
+// The construction section a road is linked to is stored in its `category` field.
+function linkedSection(f) { return (f.category || '').trim() || null; }
+
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -117,6 +128,9 @@ export default function MapPage({ user }) {
   const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  // Construction link: colorMode 'section' (per-road colours) or 'progress' (by % complete)
+  const [colorMode, setColorMode] = useState('section');
+  const [sections, setSections] = useState([]); // [{ label, avg }] from construction data
 
   const canEdit = user?.role === 'admin' || user?.role === 'construction';
 
@@ -147,6 +161,20 @@ export default function MapPage({ user }) {
       setFeatures([]);
       flash('Map storage not set up yet — run the map_features SQL in Supabase to save features.');
     }
+
+    // Construction progress per section → avg % (for the road colour-by-progress mode)
+    try {
+      const rC = await api.get('/construction');
+      const acc = {};
+      rC.data.forEach(r => {
+        if (r.pct_progress == null) return;
+        const label = `${r.project} / ${r.section}`;
+        (acc[label] = acc[label] || []).push(Number(r.pct_progress));
+      });
+      setSections(Object.entries(acc).map(([label, vals]) => ({
+        label, avg: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
+      })).sort((a, b) => a.label.localeCompare(b.label)));
+    } catch (e) { /* construction may be empty */ }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -184,6 +212,23 @@ export default function MapPage({ user }) {
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 1 },
       });
+      // Click a road → show its construction-progress link
+      map.on('click', 'roads-line', (e) => {
+        if (modeRef.current !== 'view') return;
+        const p = e.features[0].properties;
+        const pctTxt = p.pct === '' || p.pct == null
+          ? '<span style="color:#888">not linked to a construction section</span>'
+          : `<b>${p.link}</b> — <span style="color:${progressColor(Number(p.pct))};font-weight:700">${p.pct}% complete</span>`;
+        new maplibregl.Popup({ offset: 8, closeButton: true })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-family:system-ui;font-size:12px;min-width:160px">
+              <div style="font-weight:700;color:#1a3c5e;margin-bottom:3px">${p.name}</div>
+              <div style="font-size:11px">${pctTxt}</div>
+            </div>`)
+          .addTo(map);
+      });
+      map.on('mouseenter', 'roads-line', () => { if (modeRef.current === 'view') map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'roads-line', () => { map.getCanvas().style.cursor = ''; });
       // Draft road (dashed, while drawing)
       map.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
@@ -226,7 +271,11 @@ export default function MapPage({ user }) {
       .map(f => ({
         type: 'Feature',
         geometry: roadGeometry(f.coordinates),
-        properties: { color: colorForFeature(f), id: f.id, name: f.name },
+        properties: (() => {
+          const link = linkedSection(f);
+          const pct = link ? sectionAvg(link) : null;
+          return { color: featureColor(f), id: f.id, name: f.name, link: link || '', pct: pct == null ? '' : pct };
+        })(),
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
 
@@ -241,7 +290,7 @@ export default function MapPage({ user }) {
       });
       if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, duration: 1200, maxZoom: 12 });
     }
-  }, [features, visible, projects, mapReady]);
+  }, [features, visible, projects, mapReady, colorMode, sections]);
 
   // ── Render extraction markers ──
   useEffect(() => {
@@ -250,7 +299,7 @@ export default function MapPage({ user }) {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
     features.filter(f => f.type === 'extraction' && visible[f.project] && !isHidden(f)).forEach(f => {
-      const color = colorForFeature(f);
+      const color = featureColor(f);
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
       el.innerHTML = `
@@ -269,7 +318,7 @@ export default function MapPage({ user }) {
         .setLngLat(f.coordinates).setPopup(popup).addTo(map);
       markersRef.current.push(marker);
     });
-  }, [features, visible, projects, mapReady]);
+  }, [features, visible, projects, mapReady, colorMode, sections]);
 
   // ── Render draft (road being drawn or extraction point) ──
   useEffect(() => {
@@ -315,6 +364,26 @@ export default function MapPage({ user }) {
   }, [latInput, lngInput, mode]);
 
   function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 3500); }
+
+  function sectionAvg(label) {
+    const s = sections.find(x => x.label === label);
+    return s ? s.avg : null;
+  }
+  // Colour a feature: per-section palette, or by construction % when in progress mode
+  function featureColor(f) {
+    if (colorMode === 'progress' && f.type === 'road') {
+      const link = linkedSection(f);
+      return progressColor(link ? sectionAvg(link) : null);
+    }
+    return colorForFeature(f);
+  }
+  // Link a road to a construction section (stored in its category field)
+  async function setLink(f, label) {
+    try {
+      await api.patch(`/map/${f.id}`, { category: label || null });
+      setFeatures(prev => prev.map(x => x.id === f.id ? { ...x, category: label || null } : x));
+    } catch { flash('Could not save link.'); }
+  }
 
   function startMode(m) {
     setMode(m);
@@ -623,12 +692,33 @@ export default function MapPage({ user }) {
               <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} />
               Show city & country names
             </label>
-            <div>
+            <div className="mb-3">
               <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
                 <span>3D terrain intensity</span><span>{exaggeration.toFixed(1)}×</span>
               </div>
               <input type="range" min="0" max="3" step="0.2" value={exaggeration}
                 onChange={e => setExaggeration(Number(e.target.value))} className="w-full" />
+            </div>
+            {/* Road colour mode */}
+            <div>
+              <p className="text-[10px] text-slate-500 mb-1">Colour roads by</p>
+              <div className="flex gap-1">
+                <button onClick={() => setColorMode('section')}
+                  className={`flex-1 px-2 py-1 text-[10px] font-bold rounded-lg border ${colorMode === 'section' ? 'bg-[#1a3c5e] text-white border-[#1a3c5e]' : 'bg-white text-slate-500 border-slate-200'}`}>
+                  Section
+                </button>
+                <button onClick={() => setColorMode('progress')}
+                  className={`flex-1 px-2 py-1 text-[10px] font-bold rounded-lg border ${colorMode === 'progress' ? 'bg-[#1a3c5e] text-white border-[#1a3c5e]' : 'bg-white text-slate-500 border-slate-200'}`}>
+                  Construction %
+                </button>
+              </div>
+              {colorMode === 'progress' && (
+                <div className="flex flex-wrap gap-1.5 mt-2 text-[9px]">
+                  {[['<25%','#ef4444'],['25–49%','#f59e0b'],['50–79%','#84cc16'],['≥80%','#22c55e'],['no link','#9ca3af']].map(([l,c]) => (
+                    <span key={l} className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{background:c}} />{l}</span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -649,15 +739,36 @@ export default function MapPage({ user }) {
                     <ul className="divide-y divide-slate-50">
                       {items.map(f => (
                         <li key={f.id} className="flex items-center gap-2 px-3 py-2 group hover:bg-amber-50/40">
-                          <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/40" style={{ background: colorForFeature(f) }} />
-                          <button onClick={() => flyTo(f)} className="flex-1 text-left min-w-0">
-                            <p className="text-xs font-semibold text-slate-700 truncate">{f.name}</p>
-                            {f.category && <p className="text-[10px] text-red-500 truncate">{f.category}</p>}
-                            {f.created_at && <p className="text-[10px] text-slate-400 truncate">📅 {fmtDate(f.created_at)}</p>}
-                          </button>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0 mt-1 border border-white/40" style={{ background: featureColor(f) }} />
+                          <div className="flex-1 min-w-0">
+                            <button onClick={() => flyTo(f)} className="text-left w-full min-w-0">
+                              <p className="text-xs font-semibold text-slate-700 truncate">{f.name}</p>
+                              {f.type === 'extraction' && f.category && <p className="text-[10px] text-red-500 truncate">{f.category}</p>}
+                            </button>
+                            {/* Construction link — roads only */}
+                            {f.type === 'road' && (
+                              <div className="mt-1 flex items-center gap-1.5">
+                                {canEdit ? (
+                                  <select value={linkedSection(f) || ''} onChange={e => setLink(f, e.target.value)}
+                                    className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white max-w-[150px]">
+                                    <option value="">— link to section —</option>
+                                    {sections.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}
+                                  </select>
+                                ) : linkedSection(f) && (
+                                  <span className="text-[10px] text-slate-500">{linkedSection(f)}</span>
+                                )}
+                                {linkedSection(f) && sectionAvg(linkedSection(f)) != null && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded text-white"
+                                    style={{ background: progressColor(sectionAvg(linkedSection(f))) }}>
+                                    {sectionAvg(linkedSection(f))}%
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           {canEdit && (
                             <button onClick={() => deleteFeature(f)}
-                              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs">✕</button>
+                              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs mt-1">✕</button>
                           )}
                         </li>
                       ))}
