@@ -163,12 +163,19 @@ export default function MapPage({ user }) {
       flash('Map storage not set up yet — run the map_features SQL in Supabase to save features.');
     }
 
-    // Construction progress per section → avg % (for the road colour-by-progress mode)
+    // Construction progress per section → avg % (for the road colour-by-progress mode).
+    // Collapse to the LATEST value per project/sub-section/component first, so this
+    // matches the Construction Progress dashboard (older months don't drag it down).
     try {
       const rC = await api.get('/construction');
-      const acc = {};
+      const latest = {};
       rC.data.forEach(r => {
         if (r.pct_progress == null) return;
+        const k = `${r.project}||${r.sub_section}||${r.component}`;
+        if (!latest[k] || (r.reporting_period || '') > (latest[k].reporting_period || '')) latest[k] = r;
+      });
+      const acc = {};
+      Object.values(latest).forEach(r => {
         const label = `${r.project} / ${r.section}`;
         (acc[label] = acc[label] || []).push(Number(r.pct_progress));
       });
