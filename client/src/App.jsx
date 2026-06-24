@@ -14,6 +14,7 @@ import EsgCalendar from './pages/EsgCalendar';
 import Settings from './pages/Settings';
 import UserAccess from './pages/UserAccess';
 import MapPage from './pages/MapPage';
+import FieldCapture from './pages/FieldCapture';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -45,7 +46,13 @@ export default function App() {
         <NavBar user={user} onLogout={handleLogout} />
         <main>
           <Routes>
-            {user.role === 'consultant' ? (
+            {user.role?.startsWith('consultant_') ? (
+              <>
+                <Route path="/capture"  element={<FieldCapture user={user} />} />
+                <Route path="/settings" element={<Settings user={user} />} />
+                <Route path="*"         element={<Navigate to="/capture" />} />
+              </>
+            ) : user.role === 'consultant' ? (
               <>
                 <Route path="/map"      element={<MapPage user={user} />} />
                 <Route path="/settings" element={<Settings user={user} />} />

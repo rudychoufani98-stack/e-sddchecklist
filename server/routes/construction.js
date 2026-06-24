@@ -4,8 +4,10 @@ const { requireAuth, requireAdmin } = require('../auth');
 const router = express.Router();
 
 function requireAdminOrConstruction(req, res, next) {
-  // Consultants get read access too (the Site Map needs the project list + progress)
-  if (['admin', 'construction', 'consultant'].includes(req.user?.role)) return next();
+  // Consultants (incl. category field consultants) get read access — the Site Map
+  // and the field-capture screen need the project list + progress.
+  const role = req.user?.role || '';
+  if (['admin', 'construction', 'consultant'].includes(role) || role.startsWith('consultant_')) return next();
   return res.status(403).json({ error: 'Forbidden' });
 }
 

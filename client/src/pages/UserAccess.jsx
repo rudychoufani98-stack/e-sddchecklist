@@ -9,7 +9,11 @@ const ROLES = [
   { value: 'submitter',    label: 'Grievance Submitter' },
   { value: 'auditor',      label: 'Auditor (Lender)' },
   { value: 'construction', label: 'Construction Progress' },
-  { value: 'consultant',   label: 'Consultant' },
+  { value: 'consultant',   label: 'Consultant (full map)' },
+  { value: 'consultant_env',      label: 'Environmental Consultant' },
+  { value: 'consultant_social',   label: 'Social Consultant' },
+  { value: 'consultant_heritage', label: 'Cultural Heritage Consultant' },
+  { value: 'consultant_hs',       label: 'Health & Safety Consultant' },
 ];
 const roleBadge = {
   admin:        'bg-[#1a3c5e] text-white',
@@ -18,6 +22,10 @@ const roleBadge = {
   auditor:      'bg-purple-100 text-purple-700',
   construction: 'bg-green-100 text-green-700',
   consultant:   'bg-teal-100 text-teal-700',
+  consultant_env:      'bg-green-100 text-green-700',
+  consultant_social:   'bg-blue-100 text-blue-700',
+  consultant_heritage: 'bg-amber-100 text-amber-700',
+  consultant_hs:       'bg-red-100 text-red-700',
 };
 
 export default function UserAccess({ user }) {
@@ -185,6 +193,11 @@ export default function UserAccess({ user }) {
         {nu.role === 'consultant' && (
           <p className="mt-3 text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
             🧭 Consultant accounts see <strong>only the Site Map</strong>. They can add/edit roads and extraction sites (environmental, social, cultural heritage…) but cannot access other tabs.
+          </p>
+        )}
+        {nu.role?.startsWith('consultant_') && (
+          <p className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            📍 Field consultant accounts see <strong>only the Capture Extraction screen</strong> (no map). On site they tap “Use my current location” and submit — every point is locked to their category colour.
           </p>
         )}
       </div>

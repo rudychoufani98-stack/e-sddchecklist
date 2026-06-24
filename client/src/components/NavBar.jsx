@@ -251,12 +251,16 @@ export default function NavBar({ user, onLogout }) {
   );
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
+  const CONSULTANT_LABEL = {
+    consultant_env: 'Environmental Consultant', consultant_social: 'Social Consultant',
+    consultant_heritage: 'Cultural Heritage Consultant', consultant_hs: 'Health & Safety Consultant',
+  };
   const roleLabel = user?.role === 'admin' ? 'Administrator'
     : user?.role === 'submitter' ? 'Grievance Submitter'
     : user?.role === 'auditor' ? 'Auditor (Lender)'
     : user?.role === 'construction' ? 'Construction Progress'
     : user?.role === 'consultant' ? 'Consultant'
-    : 'Viewer';
+    : CONSULTANT_LABEL[user?.role] || 'Viewer';
 
   return (
     <nav className="bg-gradient-to-r from-[#15304c] via-[#1a3c5e] to-[#15304c] shadow-lg sticky top-0 z-40 border-b-2 border-[#FFD700]/70">
@@ -277,7 +281,9 @@ export default function NavBar({ user, onLogout }) {
             <div className="hidden sm:block w-px h-8 bg-white/15" />
 
             <div className="hidden sm:flex items-center gap-1">
-              {user?.role === 'consultant' ? (
+              {user?.role?.startsWith('consultant_') ? (
+                navLink('/capture', 'Capture Extraction')
+              ) : user?.role === 'consultant' ? (
                 navLink('/map', 'Site Map')
               ) : user?.role === 'construction' ? (
                 <>
