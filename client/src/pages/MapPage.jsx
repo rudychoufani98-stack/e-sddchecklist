@@ -163,7 +163,7 @@ export default function MapPage({ user }) {
       map.addLayer({
         id: 'roads-line', type: 'line', source: 'roads',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 1 },
+        paint: { 'line-color': '#ff1744', 'line-width': 6, 'line-opacity': 1 },
       });
       // Draft road (dashed, while drawing)
       map.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -210,7 +210,14 @@ export default function MapPage({ user }) {
         properties: { color: f.color || colorForProject(f.project, projects), id: f.id, name: f.name },
       }));
     map.getSource('roads').setData({ type: 'FeatureCollection', features: roadFeatures });
-    setDiag(`roads in DB: ${features.filter(f => f.type === 'road').length} · rendered: ${roadFeatures.length} · pts: ${features.filter(f => f.type === 'extraction').length} · mapReady: ${mapReady} · layer: ${map.getLayer('roads-line') ? 'yes' : 'NO'}`);
+    map.once('idle', () => {
+      try {
+        const src = map.querySourceFeatures('roads').length;
+        const rnd = map.queryRenderedFeatures({ layers: ['roads-line'] }).length;
+        const vis = map.getLayoutProperty('roads-line', 'visibility') || 'visible';
+        setDiag(`db:${features.filter(f => f.type === 'road').length} set:${roadFeatures.length} inSource:${src} rendered:${rnd} vis:${vis} pitch:${Math.round(map.getPitch())} z:${map.getZoom().toFixed(1)}`);
+      } catch (e) { setDiag('diag err: ' + e.message); }
+    });
 
     // Auto-frame everything once, the first time features arrive
     if (!fittedRef.current && features.length) {
