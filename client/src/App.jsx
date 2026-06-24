@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import UserAccess from './pages/UserAccess';
 import MapPage from './pages/MapPage';
 import FieldCapture from './pages/FieldCapture';
+import ChatPage from './pages/ChatPage';
 import NavBar from './components/NavBar';
 
 export default function App() {
@@ -49,12 +50,14 @@ export default function App() {
             {user.role?.startsWith('consultant_') ? (
               <>
                 <Route path="/capture"  element={<FieldCapture user={user} />} />
+                <Route path="/chat"     element={<ChatPage user={user} />} />
                 <Route path="/settings" element={<Settings user={user} />} />
                 <Route path="*"         element={<Navigate to="/capture" />} />
               </>
             ) : user.role === 'consultant' ? (
               <>
                 <Route path="/map"      element={<MapPage user={user} />} />
+                <Route path="/chat"     element={<ChatPage user={user} />} />
                 <Route path="/settings" element={<Settings user={user} />} />
                 <Route path="*"         element={<Navigate to="/map" />} />
               </>
@@ -62,12 +65,14 @@ export default function App() {
               <>
                 <Route path="/construction" element={<ConstructionProgress />} />
                 <Route path="/map"          element={<MapPage user={user} />} />
+                <Route path="/chat"         element={<ChatPage user={user} />} />
                 <Route path="/settings"     element={<Settings user={user} />} />
                 <Route path="*"             element={<Navigate to="/construction" />} />
               </>
             ) : user.role === 'auditor' ? (
               <>
                 <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
+                <Route path="/chat"           element={<ChatPage user={user} />} />
                 <Route path="/settings"       element={<Settings user={user} />} />
                 <Route path="*"               element={<Navigate to="/grv/grievances" />} />
               </>
@@ -75,6 +80,7 @@ export default function App() {
               <>
                 <Route path="/grv/submit"     element={<SubmitGrievance />} />
                 <Route path="/grv/grievances" element={<ExternalGrievances user={user} />} />
+                <Route path="/chat"           element={<ChatPage user={user} />} />
                 <Route path="/settings"       element={<Settings user={user} />} />
                 <Route path="*"               element={<Navigate to="/grv/grievances" />} />
               </>
@@ -87,6 +93,7 @@ export default function App() {
                 <Route path="/esg-calendar"          element={<EsgCalendar user={user} />} />
                 <Route path="/construction"         element={<ConstructionProgress />} />
                 <Route path="/map"                  element={<MapPage user={user} />} />
+                <Route path="/chat"                 element={<ChatPage user={user} />} />
                 <Route path="/grv/grievances"  element={<ExternalGrievances user={user} />} />
                 <Route path="/grv/submit"      element={<SubmitGrievance />} />
                 <Route path="/grv/settings"          element={<GrvSettings user={user} />} />
