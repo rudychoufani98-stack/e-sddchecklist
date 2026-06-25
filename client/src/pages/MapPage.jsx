@@ -154,6 +154,8 @@ export default function MapPage({ user }) {
   const [sections, setSections] = useState([]); // [{ label, avg }] from construction data
   const [view, setView] = useState('map'); // 'map' | 'table'
   const [commentTarget, setCommentTarget] = useState(null); // extraction feature for the comments modal
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjName, setNewProjName] = useState('');
 
   const canEdit = user?.role === 'admin' || user?.role === 'construction' || user?.role === 'consultant';
 
@@ -180,6 +182,10 @@ export default function MapPage({ user }) {
     try {
       const rFeat = await api.get('/map');
       setFeatures(rFeat.data);
+      // Map projects = construction projects + any project already used by map features
+      const featProjects = [...new Set(rFeat.data.map(f => f.project).filter(Boolean))];
+      setProjects(prev => [...new Set([...prev, ...featProjects])]);
+      setVisible(prev => { const v = { ...prev }; featProjects.forEach(p => { if (v[p] === undefined) v[p] = true; }); return v; });
     } catch (e) {
       setFeatures([]);
       flash('Map storage not set up yet — run the map_features SQL in Supabase to save features.');
@@ -426,6 +432,17 @@ export default function MapPage({ user }) {
   }, [latInput, lngInput, mode]);
 
   function flash(t) { setMsg(t); setTimeout(() => setMsg(''), 3500); }
+
+  // Add a new map project (e.g. Trans-Sahara). It persists once a feature is saved under it.
+  function addProject() {
+    const name = newProjName.trim();
+    if (!name) return;
+    if (!projects.includes(name)) setProjects(prev => [...prev, name]);
+    setVisible(prev => ({ ...prev, [name]: true }));
+    setSelProject(name);
+    setNewProjName(''); setAddingProject(false);
+    flash(`Project "${name}" ready — import a KMZ or add features to it.`);
+  }
 
   function sectionAvg(label) {
     const s = sections.find(x => x.label === label);
@@ -734,6 +751,21 @@ export default function MapPage({ user }) {
               <span className="w-3 h-3 rounded-full" style={{ background: colorForProject(selProject, projects) }} />
               <span className="text-xs text-slate-500">New features use this color</span>
             </div>
+            {canEdit && (addingProject ? (
+              <div className="flex gap-1.5 mt-2">
+                <input autoFocus value={newProjName} onChange={e => setNewProjName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addProject(); if (e.key === 'Escape') { setAddingProject(false); setNewProjName(''); } }}
+                  placeholder="e.g. Trans-Sahara"
+                  className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                <button onClick={addProject} disabled={!newProjName.trim()}
+                  className="px-2.5 py-1.5 text-xs font-bold bg-[#1a3c5e] text-white rounded-lg disabled:opacity-40">Add</button>
+                <button onClick={() => { setAddingProject(false); setNewProjName(''); }}
+                  className="px-2 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg">✕</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingProject(true)}
+                className="mt-2 text-xs font-semibold text-[#1a3c5e] hover:underline">+ New project</button>
+            ))}
           </div>
 
           {/* Add tools */}
