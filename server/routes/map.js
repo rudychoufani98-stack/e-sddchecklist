@@ -14,7 +14,10 @@ const ROLE_CATEGORY = {
   consultant_heritage: { category: 'Cultural Heritage', color: '#f59e0b' },
   consultant_hs:       { category: 'Health & Safety',   color: '#ef4444' },
 };
-const WRITE_ROLES = ['admin', 'construction', 'consultant', ...Object.keys(ROLE_CATEGORY)];
+// Field consultants may only CREATE (their own category points); editing/deleting
+// existing features is limited to admin / construction / full consultant.
+const CREATE_ROLES = ['admin', 'construction', 'consultant', ...Object.keys(ROLE_CATEGORY)];
+const EDIT_ROLES = ['admin', 'construction', 'consultant'];
 
 // GET all features (optionally filtered by project)
 router.get('/', async (req, res) => {
@@ -34,7 +37,7 @@ router.get('/', async (req, res) => {
 // POST create a feature (admin or construction roles)
 router.post('/', async (req, res) => {
   try {
-    if (!WRITE_ROLES.includes(req.user?.role))
+    if (!CREATE_ROLES.includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
 
     let { project, type, name, category, notes, color, coordinates } = req.body;
@@ -69,7 +72,7 @@ router.post('/', async (req, res) => {
 // PATCH update a feature
 router.patch('/:id', async (req, res) => {
   try {
-    if (!WRITE_ROLES.includes(req.user?.role))
+    if (!EDIT_ROLES.includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
     const allowed = ['project', 'type', 'name', 'category', 'notes', 'color', 'coordinates'];
     const payload = { updated_at: new Date().toISOString() };
@@ -87,7 +90,7 @@ router.patch('/:id', async (req, res) => {
 // DELETE a feature
 router.delete('/:id', async (req, res) => {
   try {
-    if (!WRITE_ROLES.includes(req.user?.role))
+    if (!EDIT_ROLES.includes(req.user?.role))
       return res.status(403).json({ error: 'Forbidden' });
     const { error } = await supabase.from('map_features').delete().eq('id', req.params.id);
     if (error) throw error;

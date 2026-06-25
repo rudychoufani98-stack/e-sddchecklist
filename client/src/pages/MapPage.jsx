@@ -98,6 +98,13 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Escape user-supplied text before putting it in marker/popup HTML (prevents stored XSS)
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // A road's coordinates are either a LineString ([[lng,lat],...]) or a
 // MultiLineString ([[[lng,lat],...],...]). Detect by nesting depth.
 function isMultiLine(coords) {
@@ -271,11 +278,11 @@ export default function MapPage({ user }) {
         const p = e.features[0].properties;
         const pctTxt = p.pct === '' || p.pct == null
           ? '<span style="color:#888">not linked to a construction section</span>'
-          : `<b>${p.link}</b> — <span style="color:${progressColor(Number(p.pct))};font-weight:700">${p.pct}% complete</span>`;
+          : `<b>${esc(p.link)}</b> — <span style="color:${progressColor(Number(p.pct))};font-weight:700">${esc(p.pct)}% complete</span>`;
         new maplibregl.Popup({ offset: 8, closeButton: true })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-family:system-ui;font-size:12px;min-width:160px">
-              <div style="font-weight:700;color:#1a3c5e;margin-bottom:3px">${p.name}</div>
+              <div style="font-weight:700;color:#1a3c5e;margin-bottom:3px">${esc(p.name)}</div>
               <div style="font-size:11px">${pctTxt}</div>
             </div>`)
           .addTo(map);
@@ -356,15 +363,15 @@ export default function MapPage({ user }) {
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
       el.innerHTML = `
-        <div style="width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #1a3c5e;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>
-        <span style="margin-top:3px;font-size:10px;font-weight:700;color:#fff;background:rgba(26,60,94,.85);padding:1px 5px;border-radius:4px;white-space:nowrap">${f.name}</span>`;
+        <div style="width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${esc(color)};border:2px solid #1a3c5e;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>
+        <span style="margin-top:3px;font-size:10px;font-weight:700;color:#fff;background:rgba(26,60,94,.85);padding:1px 5px;border-radius:4px;white-space:nowrap">${esc(f.name)}</span>`;
       const popup = new maplibregl.Popup({ offset: 24, closeButton: true }).setHTML(
         `<div style="font-family:system-ui;font-size:12px;min-width:140px">
-           <div style="font-weight:700;color:#1a3c5e;margin-bottom:2px">${f.name}</div>
-           ${f.category ? `<div style="color:#e63946;font-weight:600;font-size:11px">${f.category}</div>` : ''}
-           ${f.notes ? `<div style="color:#555;margin-top:4px">${f.notes}</div>` : ''}
+           <div style="font-weight:700;color:#1a3c5e;margin-bottom:2px">${esc(f.name)}</div>
+           ${f.category ? `<div style="color:#e63946;font-weight:600;font-size:11px">${esc(f.category)}</div>` : ''}
+           ${f.notes ? `<div style="color:#555;margin-top:4px">${esc(f.notes)}</div>` : ''}
            <div style="color:#999;margin-top:4px;font-size:10px">${f.coordinates[1].toFixed(5)}, ${f.coordinates[0].toFixed(5)}</div>
-           ${f.created_at ? `<div style="color:#999;margin-top:2px;font-size:10px">📅 Added ${fmtDate(f.created_at)}${f.created_by ? ` · ${f.created_by}` : ''}</div>` : ''}
+           ${f.created_at ? `<div style="color:#999;margin-top:2px;font-size:10px">📅 Added ${esc(fmtDate(f.created_at))}${f.created_by ? ` · ${esc(f.created_by)}` : ''}</div>` : ''}
          </div>`
       );
       const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
