@@ -28,6 +28,20 @@ const roleBadge = {
   consultant_hs:       'bg-red-100 text-red-700',
 };
 
+// Plain-English guide shown in the User Access page
+const ROLE_GUIDE = [
+  { value: 'admin',        label: 'Administrator', desc: 'Full access to everything — dashboards, data room, calendar, timeline, grievances, construction progress and the map. Can edit anywhere. Only the owner can manage users.' },
+  { value: 'viewer',       label: 'Viewer', desc: 'Read-only. Can see the ESG check-list, grievances dashboard, calendar and site map, but cannot change anything. For stakeholders who should look, not edit.' },
+  { value: 'submitter',    label: 'Grievance Submitter', desc: 'Sees only the grievances pages and can log/submit new grievances. For staff whose only job is recording grievances.' },
+  { value: 'auditor',      label: 'Auditor (Lender)', desc: 'Sees only the grievances dashboard, read-only, and is locked to ONE project / sub-section you choose. For external lenders auditing a specific section.' },
+  { value: 'construction', label: 'Construction Progress', desc: 'Sees the construction progress matrix and the site map. Views construction data and can edit the map. For the construction / PM team.' },
+  { value: 'consultant',   label: 'Consultant (full map)', desc: 'Sees only the site map. Can add, edit, import and delete roads and extraction points of any category. For a lead consultant curating the map.' },
+  { value: 'consultant_env',      label: 'Environmental Consultant', desc: 'Field account — sees only the “Capture Extraction” screen. Submits GPS points locked to the Environmental category (green). No map access.' },
+  { value: 'consultant_social',   label: 'Social Consultant', desc: 'Field account — GPS capture only, locked to the Social category (blue).' },
+  { value: 'consultant_heritage', label: 'Cultural Heritage Consultant', desc: 'Field account — GPS capture only, locked to the Cultural Heritage category (amber).' },
+  { value: 'consultant_hs',       label: 'Health & Safety Consultant', desc: 'Field account — GPS capture only, locked to the Health & Safety category (red).' },
+];
+
 export default function UserAccess({ user }) {
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -121,7 +135,22 @@ export default function UserAccess({ user }) {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-2xl font-black text-[#1a3c5e] mb-1">User Access</h1>
-      <p className="text-sm text-gray-500 mb-6">Create accounts, set roles, reset passwords. Restricted to the owner account.</p>
+      <p className="text-sm text-gray-500 mb-4">Create accounts, set roles, reset passwords. Restricted to the owner account.</p>
+
+      {/* Role reference */}
+      <details className="mb-6 bg-white border border-amber-100 rounded-2xl shadow-sm overflow-hidden">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-bold text-[#1a3c5e] select-none">
+          ℹ️ What does each role do?
+        </summary>
+        <div className="px-5 pb-4 pt-1 divide-y divide-gray-50">
+          {ROLE_GUIDE.map(r => (
+            <div key={r.label} className="py-2.5 flex gap-3">
+              <span className={`flex-shrink-0 h-fit px-2 py-0.5 rounded-full text-[11px] font-bold ${roleBadge[r.value] || 'bg-gray-100 text-gray-600'}`}>{r.label}</span>
+              <p className="text-xs text-gray-600 leading-relaxed">{r.desc}</p>
+            </div>
+          ))}
+        </div>
+      </details>
 
       {msg && (
         <div className={`mb-5 px-4 py-3 rounded-xl text-sm font-semibold ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
