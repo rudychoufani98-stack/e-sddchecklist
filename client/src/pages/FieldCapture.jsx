@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import FeatureComments from '../components/FeatureComments';
 
 // Role → fixed ESG category & pin colour (must match server/routes/map.js)
 const ROLE_CATEGORY = {
@@ -27,6 +28,7 @@ export default function FieldCapture({ user }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [mine, setMine] = useState([]);
+  const [expanded, setExpanded] = useState(null);
 
   const loadMine = useCallback(async () => {
     try {
@@ -153,12 +155,23 @@ export default function FieldCapture({ user }) {
           ) : (
             <div className="space-y-2">
               {mine.slice(0, 20).map(f => (
-                <div key={f.id} className="bg-white rounded-xl border border-amber-100 px-4 py-2.5 flex items-center gap-3">
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: f.color || cat.color }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{f.name}</p>
-                    <p className="text-[11px] text-slate-400">{f.project} · {f.coordinates[1].toFixed(5)}, {f.coordinates[0].toFixed(5)} · {fmtDateTime(f.created_at)}</p>
+                <div key={f.id} className="bg-white rounded-xl border border-amber-100 px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: f.color || cat.color }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{f.name}</p>
+                      <p className="text-[11px] text-slate-400">{f.project} · {f.coordinates[1].toFixed(5)}, {f.coordinates[0].toFixed(5)} · {fmtDateTime(f.created_at)}</p>
+                    </div>
+                    <button onClick={() => setExpanded(expanded === f.id ? null : f.id)}
+                      className="px-2.5 py-1 text-xs font-semibold text-[#1a3c5e] bg-blue-50 hover:bg-blue-100 rounded-lg flex-shrink-0">
+                      💬 {expanded === f.id ? 'Hide' : 'Details'}
+                    </button>
                   </div>
+                  {expanded === f.id && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <FeatureComments featureId={f.id} user={user} compact />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

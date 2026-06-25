@@ -101,4 +101,35 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ── Comments on a feature (extra details). Any signed-in user may read/post. ──
+router.get('/:id/comments', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('feature_comments').select('*').eq('feature_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('GET /map/:id/comments error:', err);
+    res.status(500).json({ error: 'An internal error occurred' });
+  }
+});
+
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const body = (req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Comment is required.' });
+    if (body.length > 2000) return res.status(400).json({ error: 'Comment too long.' });
+    const { data, error } = await supabase
+      .from('feature_comments')
+      .insert({ feature_id: Number(req.params.id), username: req.user.username, body })
+      .select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    console.error('POST /map/:id/comments error:', err);
+    res.status(500).json({ error: 'An internal error occurred' });
+  }
+});
+
 module.exports = router;

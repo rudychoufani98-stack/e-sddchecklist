@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import JSZip from 'jszip';
 import { kml as kmlToGeoJSON } from '@tmcw/togeojson';
 import api from '../api';
+import FeatureComments from '../components/FeatureComments';
 
 // MapLibre is loaded from CDN in public/index.html (window.maplibregl) so that
 // Create React App's minifier never mangles MapLibre's web worker — bundling it
@@ -152,6 +153,7 @@ export default function MapPage({ user }) {
   const [colorMode, setColorMode] = useState('section');
   const [sections, setSections] = useState([]); // [{ label, avg }] from construction data
   const [view, setView] = useState('map'); // 'map' | 'table'
+  const [commentTarget, setCommentTarget] = useState(null); // extraction feature for the comments modal
 
   const canEdit = user?.role === 'admin' || user?.role === 'construction' || user?.role === 'consultant';
 
@@ -653,7 +655,7 @@ export default function MapPage({ user }) {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-left">
-                    {['Site', 'Project', 'Category', 'Notes', 'Coordinates', 'Added', ''].map(h => (
+                    {['Site', 'Project', 'Category', 'Notes', 'Coordinates', 'Added', 'Comments', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
@@ -674,6 +676,10 @@ export default function MapPage({ user }) {
                       <td className="px-4 py-3 text-slate-500 font-mono text-xs whitespace-nowrap">{f.coordinates[1].toFixed(5)}, {f.coordinates[0].toFixed(5)}</td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(f.created_at)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
+                        <button onClick={() => setCommentTarget(f)}
+                          className="px-2.5 py-1 text-xs font-semibold text-[#1a3c5e] bg-blue-50 hover:bg-blue-100 rounded-lg">💬 Comments</button>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <button onClick={() => { setView('map'); setTimeout(() => flyTo(f), 100); }}
                           className="px-2 py-1 text-xs font-semibold text-[#1a3c5e] hover:bg-blue-50 rounded mr-1" title="Locate on map">📍</button>
                         {canEdit && (
@@ -689,6 +695,23 @@ export default function MapPage({ user }) {
           )}
         </div>
       </div>
+
+      {/* ── Comments modal ── */}
+      {commentTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setCommentTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-1">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{commentTarget.name}</h3>
+                <p className="text-xs" style={{ color: CATEGORY_COLORS[commentTarget.category] || '#64748b' }}>{commentTarget.category || 'Extraction site'}</p>
+              </div>
+              <button onClick={() => setCommentTarget(null)} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+            </div>
+            {commentTarget.notes && <p className="text-xs text-slate-500 mb-3 bg-slate-50 rounded-lg px-3 py-2">{commentTarget.notes}</p>}
+            <FeatureComments featureId={commentTarget.id} user={user} />
+          </div>
+        </div>
+      )}
 
       {/* ── Map view (kept mounted; hidden when on table so MapLibre persists) ── */}
       <div className={`flex-1 min-h-0 ${view === 'map' ? 'flex' : 'hidden'}`}>
