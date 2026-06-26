@@ -94,6 +94,21 @@ const CATEGORY_COLORS = {
 };
 const CATEGORIES = Object.keys(CATEGORY_COLORS);
 
+// Site facilities — each type has a fixed colour. Placed as a pin or an area (polygon).
+const FACILITY_COLORS = {
+  'Yard':                   '#f59e0b',
+  'Borrow pit':             '#a16207',
+  'Water supply site':      '#0ea5e9',
+  'Quarry':                 '#6b7280',
+  'Laydown area':           '#8b5cf6',
+  'Satellite yard':         '#ec4899',
+  'Landfill':               '#65a30d',
+  'Hospital':               '#ef4444',
+  'Accommodation facility': '#14b8a6',
+};
+const FACILITY_TYPES = Object.keys(FACILITY_COLORS);
+const isFacility = (f) => f.type === 'facility' || f.type === 'facility_area';
+
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -118,6 +133,12 @@ function roadGeometry(coords) {
 }
 function firstVertex(coords) {
   return isMultiLine(coords) ? coords[0][0] : coords[0];
+}
+// Ensure a polygon ring is closed (first point repeated at the end)
+function closeRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return ring || [];
+  const a = ring[0], b = ring[ring.length - 1];
+  return (a[0] === b[0] && a[1] === b[1]) ? ring : [...ring, a];
 }
 
 export default function MapPage({ user }) {
@@ -156,6 +177,8 @@ export default function MapPage({ user }) {
   const [commentTarget, setCommentTarget] = useState(null); // extraction feature for the comments modal
   const [addingProject, setAddingProject] = useState(false);
   const [newProjName, setNewProjName] = useState('');
+  const [facilityType, setFacilityType] = useState(FACILITY_TYPES[0]); // selected type when adding a facility
+  const [showFacilities, setShowFacilities] = useState(true);
 
   const canEdit = user?.role === 'admin' || user?.role === 'construction' || user?.role === 'consultant';
 
@@ -297,6 +320,32 @@ export default function MapPage({ user }) {
       });
       map.on('mouseenter', 'roads-line', () => { if (modeRef.current === 'view') map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'roads-line', () => { map.getCanvas().style.cursor = ''; });
+      // Facility areas (polygons): filled + outlined, coloured by facility type
+      map.addSource('facilities', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'facility-fill', type: 'fill', source: 'facilities',
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.3 },
+      });
+      map.addLayer({
+        id: 'facility-outline', type: 'line', source: 'facilities',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 2 },
+      });
+      map.on('click', 'facility-fill', (e) => {
+        if (modeRef.current !== 'view') return;
+        const p = e.features[0].properties;
+        new maplibregl.Popup({ offset: 8, closeButton: true })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-family:system-ui;font-size:12px;min-width:150px">
+              <div style="font-weight:700;color:#1a3c5e">${esc(p.name)}</div>
+              <div style="font-size:11px;color:${esc(p.color)};font-weight:600">${esc(p.category)}</div>
+              ${p.notes ? `<div style="font-size:11px;color:#555;margin-top:3px">${esc(p.notes)}</div>` : ''}
+            </div>`)
+          .addTo(map);
+      });
+      map.on('mouseenter', 'facility-fill', () => { if (modeRef.current === 'view') map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'facility-fill', () => { map.getCanvas().style.cursor = ''; });
+
       // Draft road (dashed, while drawing)
       map.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
@@ -315,9 +364,9 @@ export default function MapPage({ user }) {
     // Click handler — uses refs to read latest mode
     map.on('click', (e) => {
       const lngLat = [e.lngLat.lng, e.lngLat.lat];
-      if (modeRef.current === 'road') {
-        setDraftRoad(prev => [...prev, lngLat]);
-      } else if (modeRef.current === 'extraction') {
+      if (modeRef.current === 'road' || modeRef.current === 'farea') {
+        setDraftRoad(prev => [...prev, lngLat]);   // farea reuses the draft polyline as the polygon outline
+      } else if (modeRef.current === 'extraction' || modeRef.current === 'facility') {
         setDraftPoint(lngLat);
       }
     });
@@ -352,7 +401,7 @@ export default function MapPage({ user }) {
       fittedRef.current = true;
       const bounds = new maplibregl.LngLatBounds();
       features.filter(f => !isHidden(f)).forEach(f => {
-        if (f.type === 'extraction') bounds.extend(f.coordinates);
+        if (f.type === 'extraction' || f.type === 'facility') bounds.extend(f.coordinates);
         else if (isMultiLine(f.coordinates)) f.coordinates.forEach(line => line.forEach(c => bounds.extend(c)));
         else f.coordinates.forEach(c => bounds.extend(c));
       });
@@ -360,18 +409,39 @@ export default function MapPage({ user }) {
     }
   }, [features, visible, projects, mapReady, colorMode, sections]);
 
-  // ── Render extraction markers ──
+  // ── Render facility AREAS (polygons) ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getSource('facilities')) return;
+    const polys = features
+      .filter(f => f.type === 'facility_area' && visible[f.project] && showFacilities)
+      .map(f => ({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [closeRing(f.coordinates)] },
+        properties: { color: featureColor(f), name: f.name, category: f.category || '', notes: f.notes || '' },
+      }));
+    map.getSource('facilities').setData({ type: 'FeatureCollection', features: polys });
+  }, [features, visible, showFacilities, mapReady]);
+
+  // ── Render extraction + facility-point markers ──
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
-    features.filter(f => f.type === 'extraction' && visible[f.project] && !isHidden(f)).forEach(f => {
+    features.filter(f => (
+      (f.type === 'extraction' || f.type === 'facility') && visible[f.project] && !isHidden(f) &&
+      (f.type === 'extraction' || showFacilities)
+    )).forEach(f => {
       const color = featureColor(f);
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+      // Facilities = square marker, extraction sites = teardrop pin (so they read differently)
+      const shape = f.type === 'facility'
+        ? `<div style="width:16px;height:16px;border-radius:3px;background:${esc(color)};border:2px solid #1a3c5e;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>`
+        : `<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${esc(color)};border:2px solid #1a3c5e;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>`;
       el.innerHTML = `
-        <div style="width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${esc(color)};border:2px solid #1a3c5e;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>
+        ${shape}
         <span style="margin-top:3px;font-size:10px;font-weight:700;color:#fff;background:rgba(26,60,94,.85);padding:1px 5px;border-radius:4px;white-space:nowrap">${esc(f.name)}</span>`;
       const popup = new maplibregl.Popup({ offset: 24, closeButton: true }).setHTML(
         `<div style="font-family:system-ui;font-size:12px;min-width:140px">
@@ -386,19 +456,19 @@ export default function MapPage({ user }) {
         .setLngLat(f.coordinates).setPopup(popup).addTo(map);
       markersRef.current.push(marker);
     });
-  }, [features, visible, projects, mapReady, colorMode, sections]);
+  }, [features, visible, projects, mapReady, colorMode, sections, showFacilities]);
 
   // ── Render draft (road being drawn or extraction point) ──
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getSource('draft')) return;
     const draftFeatures = [];
-    if (mode === 'road' && draftRoad.length) {
+    if ((mode === 'road' || mode === 'farea') && draftRoad.length) {
       if (draftRoad.length >= 2)
         draftFeatures.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: draftRoad }, properties: {} });
       draftRoad.forEach(c => draftFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: {} }));
     }
-    if (mode === 'extraction' && draftPoint)
+    if ((mode === 'extraction' || mode === 'facility') && draftPoint)
       draftFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: draftPoint }, properties: {} });
     map.getSource('draft').setData({ type: 'FeatureCollection', features: draftFeatures });
   }, [draftRoad, draftPoint, mode, mapReady]);
@@ -448,8 +518,9 @@ export default function MapPage({ user }) {
     const s = sections.find(x => x.label === label);
     return s ? s.avg : null;
   }
-  // Colour a feature: extraction sites by category, roads by section (or % in progress mode)
+  // Colour a feature: facilities & extraction sites by category, roads by section
   function featureColor(f) {
+    if (isFacility(f)) return FACILITY_COLORS[f.category] || '#6b7280';
     if (f.type === 'extraction') return CATEGORY_COLORS[f.category] || colorForFeature(f);
     if (colorMode === 'progress' && f.type === 'road') {
       const link = linkedSection(f);
@@ -619,6 +690,36 @@ export default function MapPage({ user }) {
     setSaving(false);
   }
 
+  async function saveFacilityPin() {
+    if (!draftPoint) { flash('Click on the map to place the facility.'); return; }
+    if (!form.name.trim()) { flash('Give the facility a name.'); return; }
+    setSaving(true);
+    try {
+      await api.post('/map', {
+        project: selProject, type: 'facility', name: form.name.trim(),
+        category: facilityType, color: FACILITY_COLORS[facilityType],
+        notes: form.notes.trim() || null, coordinates: draftPoint,
+      });
+      flash('✓ Facility saved.'); startMode('view'); load();
+    } catch { flash('Error saving facility.'); }
+    setSaving(false);
+  }
+
+  async function saveFacilityArea() {
+    if (draftRoad.length < 3) { flash('An area needs at least 3 points.'); return; }
+    if (!form.name.trim()) { flash('Give the facility a name.'); return; }
+    setSaving(true);
+    try {
+      await api.post('/map', {
+        project: selProject, type: 'facility_area', name: form.name.trim(),
+        category: facilityType, color: FACILITY_COLORS[facilityType],
+        notes: form.notes.trim() || null, coordinates: draftRoad,
+      });
+      flash('✓ Facility area saved.'); startMode('view'); load();
+    } catch { flash('Error saving facility area.'); }
+    setSaving(false);
+  }
+
   async function deleteFeature(f) {
     if (!window.confirm(`Delete "${f.name}"?`)) return;
     try { await api.delete(`/map/${f.id}`); load(); } catch { flash('Error deleting.'); }
@@ -626,8 +727,9 @@ export default function MapPage({ user }) {
 
   function flyTo(f) {
     const map = mapRef.current; if (!map) return;
-    const center = f.type === 'road' ? firstVertex(f.coordinates) : f.coordinates;
-    map.flyTo({ center, zoom: 12, duration: 1500 });
+    // point types use the coord directly; lines/areas use their first vertex
+    const center = (f.type === 'extraction' || f.type === 'facility') ? f.coordinates : firstVertex(f.coordinates);
+    map.flyTo({ center, zoom: 13, duration: 1500 });
   }
 
   // Group features by project for the sidebar list
@@ -636,6 +738,7 @@ export default function MapPage({ user }) {
 
   // All real (non-junk) extraction sites, for the table
   const extractionRows = features.filter(f => f.type === 'extraction' && !isHidden(f));
+  const facilityRows = features.filter(f => isFacility(f));
 
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col bg-[#FDF6E3]">
@@ -649,6 +752,62 @@ export default function MapPage({ user }) {
           className={`px-4 py-1.5 text-sm font-bold rounded-lg ${view === 'table' ? 'bg-[#1a3c5e] text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
           📋 Extraction Sites{extractionRows.length ? ` (${extractionRows.length})` : ''}
         </button>
+        <button onClick={() => setView('facilities')}
+          className={`px-4 py-1.5 text-sm font-bold rounded-lg ${view === 'facilities' ? 'bg-[#1a3c5e] text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+          🏗️ Facilities{facilityRows.length ? ` (${facilityRows.length})` : ''}
+        </button>
+      </div>
+
+      {/* ── Facilities table view ── */}
+      <div className={`flex-1 overflow-auto p-6 ${view === 'facilities' ? 'block' : 'hidden'}`}>
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-xl font-black text-[#1a3c5e] mb-1">Facilities</h2>
+          <p className="text-sm text-slate-500 mb-3">{facilityRows.length} facilit{facilityRows.length !== 1 ? 'ies' : 'y'} · 📍 locate · ✕ delete</p>
+          <div className="flex flex-wrap gap-3 mb-4 text-xs text-slate-600">
+            {FACILITY_TYPES.map(t => (
+              <span key={t} className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: FACILITY_COLORS[t] }} />{t}</span>
+            ))}
+          </div>
+          {facilityRows.length === 0 ? (
+            <div className="bg-white border border-amber-100 rounded-2xl p-10 text-center text-slate-400">
+              No facilities yet. On the Map tab use <b>🏗️ Facility pin</b> or <b>▱ Facility area</b>.
+            </div>
+          ) : (
+            <div className="bg-white border border-amber-100 rounded-2xl overflow-hidden shadow-sm">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-left">
+                    {['Name', 'Type', 'Project', 'Shape', 'Notes', 'Added', ''].map(h => (
+                      <th key={h} className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {facilityRows.map(f => (
+                    <tr key={f.id} className="hover:bg-amber-50/30">
+                      <td className="px-4 py-3 font-semibold text-slate-800">
+                        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: featureColor(f) }} />{f.name}</span>
+                      </td>
+                      <td className="px-4 py-3"><span className="px-2 py-0.5 text-xs font-semibold rounded-full text-white" style={{ background: FACILITY_COLORS[f.category] || '#6b7280' }}>{f.category || '—'}</span></td>
+                      <td className="px-4 py-3 text-slate-600">{f.project}</td>
+                      <td className="px-4 py-3 text-slate-500">{f.type === 'facility_area' ? '▱ area' : '📍 pin'}</td>
+                      <td className="px-4 py-3 text-slate-500 max-w-[220px]">{f.notes || <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(f.created_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button onClick={() => { setView('map'); setTimeout(() => flyTo(f), 100); }}
+                          className="px-2 py-1 text-xs font-semibold text-[#1a3c5e] hover:bg-blue-50 rounded mr-1" title="Locate on map">📍</button>
+                        {canEdit && (
+                          <button onClick={() => deleteFeature(f)}
+                            className="px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 rounded" title="Delete">✕</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Extraction table view ── */}
@@ -783,6 +942,14 @@ export default function MapPage({ user }) {
                       className="px-3 py-2 text-xs font-bold bg-[#e63946] text-white rounded-lg hover:bg-[#c92a37] transition-colors">
                       📍 Extraction
                     </button>
+                    <button onClick={() => startMode('facility')}
+                      className="px-3 py-2 text-xs font-bold bg-[#8338ec] text-white rounded-lg hover:bg-[#6f2cc9] transition-colors">
+                      🏗️ Facility pin
+                    </button>
+                    <button onClick={() => startMode('farea')}
+                      className="px-3 py-2 text-xs font-bold bg-[#0ea5e9] text-white rounded-lg hover:bg-[#0284c7] transition-colors">
+                      ▱ Facility area
+                    </button>
                   </div>
                   <input ref={fileInputRef} type="file" accept=".kmz,.kml" onChange={handleImportFile} className="hidden" />
                   <button onClick={() => fileInputRef.current?.click()} disabled={importing}
@@ -879,6 +1046,47 @@ export default function MapPage({ user }) {
                   </div>
                 </div>
               )}
+
+              {/* Facility pin / area panel */}
+              {(mode === 'facility' || mode === 'farea') && (
+                <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 space-y-2.5">
+                  <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                    {mode === 'facility' ? 'New facility (pin)' : 'New facility (area)'}
+                  </p>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Facility type</label>
+                    <select value={facilityType} onChange={e => setFacilityType(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+                      {FACILITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-500">
+                      <span className="w-3 h-3 rounded-full" style={{ background: FACILITY_COLORS[facilityType] }} />
+                      Colour for {facilityType}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-purple-800 font-semibold">
+                    {mode === 'facility'
+                      ? (draftPoint ? `✓ ${draftPoint[1].toFixed(5)}, ${draftPoint[0].toFixed(5)}` : 'Click on the map to place the pin.')
+                      : `Click on the map to outline the area (${draftRoad.length} point${draftRoad.length !== 1 ? 's' : ''}).`}
+                  </p>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="Name (e.g. Main laydown yard)"
+                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                    placeholder="Notes (optional)"
+                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                  <div className="flex gap-1.5">
+                    {mode === 'farea' && (
+                      <button onClick={() => setDraftRoad(p => p.slice(0, -1))} disabled={!draftRoad.length}
+                        className="px-2 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg disabled:opacity-40">↶</button>
+                    )}
+                    <button onClick={cancelDraft} className="flex-1 px-2 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg">Cancel</button>
+                    <button onClick={mode === 'facility' ? saveFacilityPin : saveFacilityArea}
+                      disabled={saving || (mode === 'facility' ? !draftPoint : draftRoad.length < 3)}
+                      className="flex-1 px-2 py-1.5 text-xs font-bold bg-[#8338ec] text-white rounded-lg disabled:opacity-40">Save</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -891,6 +1099,20 @@ export default function MapPage({ user }) {
               <input type="checkbox" checked={showLabels} onChange={e => setShowLabels(e.target.checked)} />
               Show city & country names
             </label>
+            <label className="flex items-center gap-2 text-xs text-slate-600 mb-2 cursor-pointer">
+              <input type="checkbox" checked={showFacilities} onChange={e => setShowFacilities(e.target.checked)} />
+              Show facilities
+            </label>
+            <details className="mb-2">
+              <summary className="text-[10px] text-slate-500 cursor-pointer">Facility colours</summary>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                {FACILITY_TYPES.map(t => (
+                  <span key={t} className="inline-flex items-center gap-1 text-[10px] text-slate-600">
+                    <span className="w-2.5 h-2.5 rounded-sm" style={{ background: FACILITY_COLORS[t] }} />{t}
+                  </span>
+                ))}
+              </div>
+            </details>
             {/* Imagery date picker (Esri Wayback) */}
             <div className="mb-3">
               <p className="text-[10px] text-slate-500 mb-0.5">Satellite imagery</p>
@@ -998,7 +1220,10 @@ export default function MapPage({ user }) {
         <div ref={containerRef} className="absolute inset-0" />
         {mode !== 'view' && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1a3c5e] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-10">
-            {mode === 'road' ? '✏️ Drawing road — click to add points' : '📍 Click to place extraction site'}
+            {mode === 'road' ? '✏️ Drawing road — click to add points'
+              : mode === 'farea' ? `▱ Outlining ${facilityType} — click to add corners`
+              : mode === 'facility' ? `🏗️ Click to place ${facilityType}`
+              : '📍 Click to place extraction site'}
           </div>
         )}
         <div className="absolute bottom-2 right-2 bg-white/85 text-[10px] text-slate-600 px-2 py-1 rounded-md shadow z-10 max-w-[280px]">

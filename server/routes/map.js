@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-const TYPES = ['road', 'extraction'];
+const TYPES = ['road', 'extraction', 'facility', 'facility_area'];
 
 // Category-locked field consultants: their submissions are forced to this category/colour
 const ROLE_CATEGORY = {
