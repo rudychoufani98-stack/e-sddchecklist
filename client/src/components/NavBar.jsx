@@ -318,7 +318,7 @@ export default function NavBar({ user, onLogout }) {
           <div className="flex items-center gap-6">
             <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
               <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0" aria-hidden="true">
-                <path d="M50 3 Q50 50 97 50 Q50 50 50 97 Q50 50 3 50 Q50 50 50 3 Z" fill="white" />
+                <path d="M8 8 C50 50 50 50 92 8 C50 50 50 50 92 92 C50 50 50 50 8 92 C50 50 50 50 8 8 Z" fill="white" />
               </svg>
               <div>
                 <div className="text-white font-bold text-base leading-tight tracking-tight">Skykapital</div>

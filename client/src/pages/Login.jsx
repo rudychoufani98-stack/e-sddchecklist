@@ -33,7 +33,7 @@ export default function Login({ onLogin }) {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <svg viewBox="0 0 100 100" className="w-16 h-16 mx-auto mb-4 drop-shadow" aria-hidden="true">
-            <path d="M50 3 Q50 50 97 50 Q50 50 50 97 Q50 50 3 50 Q50 50 50 3 Z" fill="#1a3c5e" />
+            <path d="M8 8 C50 50 50 50 92 8 C50 50 50 50 92 92 C50 50 50 50 8 92 C50 50 50 50 8 8 Z" fill="#001a3d" />
           </svg>
           <h1 className="text-3xl font-black text-[#1a3c5e] tracking-tight">Skykapital</h1>
           <p className="text-gray-500 text-sm mt-1">E&amp;S Due Diligence Tracker</p>
