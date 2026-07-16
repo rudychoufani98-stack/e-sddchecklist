@@ -89,7 +89,7 @@ router.get('/stats/summary', async (req, res) => {
 // GET all grievances with filters
 router.get('/', async (req, res) => {
   try {
-    const { project_id, sub_section_id, status, risk_significance, escalation_level, from, to, search } = req.query;
+    const { project_id, sub_section_id, status, risk_significance, escalation_level, nature_of_grievance, from, to, search } = req.query;
 
     let q = supabase.from('grievances')
       .select('*, grv_projects(name), grv_sub_sections(name)')
@@ -106,6 +106,7 @@ router.get('/', async (req, res) => {
     if (status)            q = q.eq('status', status);
     if (risk_significance) q = q.eq('risk_significance', risk_significance);
     if (escalation_level)  q = q.eq('escalation_level', escalation_level);
+    if (nature_of_grievance) q = q.eq('nature_of_grievance', nature_of_grievance);
     if (from)              q = q.gte('date_of_receipt', from);
     if (to)                q = q.lte('date_of_receipt', to);
 

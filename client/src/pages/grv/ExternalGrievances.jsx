@@ -73,9 +73,10 @@ export default function ExternalGrievances({ user }) {
   // Filters
   const [filters, setFilters] = useState({
     project_id: '', sub_section_id: '', escalation_level: '', from: '', to: '',
-    risk_significance: '',
+    risk_significance: '', nature_of_grievance: '',
   });
   const [search, setSearch] = useState('');
+  const [natureOptions, setNatureOptions] = useState([]);
 
   const allSubSections = projects.flatMap(p =>
     (p.grv_sub_sections || []).map(s => ({ ...s, projectId: p.id }))
@@ -95,6 +96,11 @@ export default function ExternalGrievances({ user }) {
       setGrievances(gRes.data);
       setStats(sRes.data);
       setProjects(pRes.data);
+      // Only rebuild the nature list when no nature is selected, so the
+      // dropdown keeps all choices while one of them is active.
+      if (!filters.nature_of_grievance) {
+        setNatureOptions([...new Set(gRes.data.map(g => g.nature_of_grievance).filter(Boolean))].sort());
+      }
     } catch {}
     setLoading(false);
   }, [filters, search]);
@@ -241,12 +247,17 @@ export default function ExternalGrievances({ user }) {
                 <option value="">Escalation — All</option>
                 {Object.entries(ESCALATION_LABELS).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
               </select>
+              <select value={filters.nature_of_grievance} onChange={e => setFilters(f=>({...f, nature_of_grievance: e.target.value}))}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[160px]">
+                <option value="">Nature — All</option>
+                {natureOptions.map(n => <option key={n} value={n}>{n.replace(/_/g,' ')}</option>)}
+              </select>
               <input type="date" value={filters.from} onChange={e => setFilters(f=>({...f, from: e.target.value}))}
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
               <input type="date" value={filters.to} onChange={e => setFilters(f=>({...f, to: e.target.value}))}
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
               {Object.values(filters).some(Boolean) && (
-                <button onClick={() => setFilters({project_id:'',sub_section_id:'',escalation_level:'',from:'',to:'',risk_significance:''})}
+                <button onClick={() => setFilters({project_id:'',sub_section_id:'',escalation_level:'',from:'',to:'',risk_significance:'',nature_of_grievance:''})}
                   className="px-3 py-2 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
                   Clear Filters
                 </button>
