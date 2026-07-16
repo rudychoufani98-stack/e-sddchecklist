@@ -65,6 +65,18 @@ export default function ExternalGrievances({ user }) {
   const [selected, setSelected] = useState(null);
   const [closingId, setClosingId] = useState(null);
 
+  // ESG Activities
+  const [activities, setActivities] = useState([]);
+  const emptyActivity = {
+    activity_date: new Date().toISOString().split('T')[0],
+    project_id: '', sub_section_id: '', community_name: '',
+    title: '', description: '', participants: '', conducted_by: '',
+  };
+  const [activityModal, setActivityModal] = useState(false);
+  const [actForm, setActForm] = useState(emptyActivity);
+  const [actError, setActError] = useState('');
+  const [actSaving, setActSaving] = useState(false);
+
   // Close modal state
   const [closeModal, setCloseModal] = useState(null); // grievance object to close
   const [closeSolution, setCloseSolution] = useState('');
@@ -88,14 +100,20 @@ export default function ExternalGrievances({ user }) {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
       if (search) params.set('search', search);
-      const [gRes, sRes, pRes] = await Promise.all([
+      // Activities share the project / sub-section / date filters
+      const actParams = new URLSearchParams();
+      ['project_id','sub_section_id','from','to'].forEach(k => { if (filters[k]) actParams.set(k, filters[k]); });
+      const [gRes, sRes, pRes, aRes] = await Promise.all([
         api.get(`/grievances?${params}`),
         api.get('/grievances/stats/summary'),
         api.get('/grv-projects'),
+        // Fail-soft so the page still works if the activities table isn't created yet
+        api.get(`/esg-activities?${actParams}`).catch(() => ({ data: [] })),
       ]);
       setGrievances(gRes.data);
       setStats(sRes.data);
       setProjects(pRes.data);
+      setActivities(aRes.data);
       // Only rebuild the nature list when no nature is selected, so the
       // dropdown keeps all choices while one of them is active.
       if (!filters.nature_of_grievance) {
@@ -147,6 +165,27 @@ export default function ExternalGrievances({ user }) {
     loadAll();
   }
 
+  async function saveActivity() {
+    if (!actForm.title.trim()) { setActError('Please give the activity a name.'); return; }
+    if (!actForm.activity_date) { setActError('Please choose a date.'); return; }
+    setActSaving(true);
+    try {
+      await api.post('/esg-activities', actForm);
+      setActivityModal(false);
+      setActForm(emptyActivity);
+      loadAll();
+    } catch {
+      setActError('Could not save the activity. Please try again.');
+    }
+    setActSaving(false);
+  }
+
+  async function deleteActivity(id) {
+    if (!window.confirm('Delete this activity?')) return;
+    await api.delete(`/esg-activities/${id}`).catch(() => {});
+    loadAll();
+  }
+
   function exportCSV() {
     const cols = ['reference_no','date_of_receipt','project_name','sub_section_name','community_name','nature_type','nature_of_grievance','issue_description','risk_significance','priority_level','status','escalation_level','deadline','submitted_by'];
     const rows = [cols.join(','), ...displayed.map(g => cols.map(c => JSON.stringify(g[c] ?? '')).join(','))];
@@ -179,10 +218,11 @@ export default function ExternalGrievances({ user }) {
   const followUp  = grievances.filter(g => g.follow_up_required).length;
 
   const TABS = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'all',       label: `All (${grievances.length})` },
-    { key: 'open',      label: `Open (${totalOpen})` },
-    { key: 'closed',    label: `Closed (${totalClosed})` },
+    { key: 'dashboard',  label: 'Dashboard' },
+    { key: 'all',        label: `All (${grievances.length})` },
+    { key: 'open',       label: `Open (${totalOpen})` },
+    { key: 'closed',     label: `Closed (${totalClosed})` },
+    { key: 'activities', label: `ESG Activities (${activities.length})` },
   ];
 
   // For auditor (lender) accounts: the project/sub-section they are restricted to
@@ -368,8 +408,70 @@ export default function ExternalGrievances({ user }) {
           </div>
         )}
 
+        {/* ══════ ESG ACTIVITIES ══════ */}
+        {tab === 'activities' && (
+          <div>
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold text-gray-700">{activities.length} activit{activities.length !== 1 ? 'ies' : 'y'}</span>
+                  <span className="text-xs text-gray-400 ml-2">Everything done for the community: meetings, trainings, donations, consultations...</span>
+                </div>
+                {isAdmin && (
+                  <button onClick={() => { setActForm(emptyActivity); setActError(''); setActivityModal(true); }}
+                    className="px-3 py-2 text-xs font-semibold bg-[#1a3c5e] text-white rounded-lg hover:bg-[#122d47] transition-colors">
+                    + Record Activity
+                  </button>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/80 border-b border-gray-100 text-left">
+                      {['Date','Project','Community','Activity','Participants','Conducted By','Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">Loading...</td></tr>}
+                    {!loading && activities.length === 0 && (
+                      <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">
+                        No activities recorded yet.{isAdmin ? ' Click "+ Record Activity" to add the first one.' : ''}
+                      </td></tr>
+                    )}
+                    {activities.map(a => (
+                      <tr key={a.id} className="hover:bg-amber-50/20 transition-colors">
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{a.activity_date || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-medium text-gray-700 whitespace-nowrap">
+                          {a.project_name || '—'}{a.sub_section_name ? ` — ${a.sub_section_name}` : ''}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{a.community_name || '—'}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-xs font-semibold text-gray-800">{a.title}</p>
+                          {a.description && <p className="text-xs text-gray-400 max-w-[320px] whitespace-pre-wrap break-words mt-0.5">{a.description}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{a.participants ?? '—'}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{a.conducted_by || '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {isAdmin && (
+                            <button onClick={() => deleteActivity(a.id)}
+                              className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
+                              Del
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ══════ TABLE TABS ══════ */}
-        {tab !== 'dashboard' && (
+        {tab !== 'dashboard' && tab !== 'activities' && (
           <div>
             {/* Search */}
             <div className="mb-3 flex gap-2">
@@ -439,6 +541,93 @@ export default function ExternalGrievances({ user }) {
           </div>
         )}
       </div>
+
+      {/* ── RECORD ACTIVITY MODAL ── */}
+      {activityModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setActivityModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+              <p className="text-base font-black text-[#1a3c5e]">Record an ESG Activity</p>
+              <p className="text-xs text-gray-400 mt-0.5">Something done for the community (meeting, training, donation, consultation...)</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Date <span className="text-red-500">*</span></label>
+                  <input type="date" value={actForm.activity_date}
+                    onChange={e => { setActForm(f => ({...f, activity_date: e.target.value})); setActError(''); }}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Community</label>
+                  <input type="text" value={actForm.community_name} placeholder="e.g. Kpone village"
+                    onChange={e => setActForm(f => ({...f, community_name: e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Project</label>
+                  <select value={actForm.project_id}
+                    onChange={e => setActForm(f => ({...f, project_id: e.target.value, sub_section_id: ''}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
+                    <option value="">— None —</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Sub Section</label>
+                  <select value={actForm.sub_section_id}
+                    onChange={e => setActForm(f => ({...f, sub_section_id: e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
+                    <option value="">— None —</option>
+                    {projects.flatMap(p => (p.grv_sub_sections || []).map(s => ({ ...s, projectId: p.id })))
+                      .filter(s => !actForm.project_id || s.projectId === parseInt(actForm.project_id))
+                      .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Activity <span className="text-red-500">*</span></label>
+                <input type="text" value={actForm.title} placeholder="e.g. School supplies donation"
+                  onChange={e => { setActForm(f => ({...f, title: e.target.value})); setActError(''); }}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Description</label>
+                <textarea rows={3} value={actForm.description} placeholder="What was done, for whom, and the outcome..."
+                  onChange={e => setActForm(f => ({...f, description: e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] resize-y" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Participants</label>
+                  <input type="number" min="0" value={actForm.participants} placeholder="e.g. 45"
+                    onChange={e => setActForm(f => ({...f, participants: e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">Conducted By</label>
+                  <input type="text" value={actForm.conducted_by} placeholder="e.g. Site E&S team"
+                    onChange={e => setActForm(f => ({...f, conducted_by: e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
+                </div>
+              </div>
+              {actError && <p className="text-xs text-red-600">{actError}</p>}
+            </div>
+            <div className="px-6 pb-5 flex gap-3 justify-end">
+              <button onClick={() => setActivityModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={saveActivity} disabled={actSaving}
+                className="px-4 py-2 text-sm font-bold bg-[#1a3c5e] text-white rounded-xl hover:bg-[#122d47] transition-colors disabled:opacity-50">
+                {actSaving ? 'Saving...' : 'Save Activity'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── CLOSE MODAL ── */}
       {closeModal && (
