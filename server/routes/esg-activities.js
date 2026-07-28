@@ -28,7 +28,12 @@ router.get('/', async (req, res) => {
     const effSubId     = scope ? scope.sub_section_id : sub_section_id;
 
     if (effProjectId) q = q.eq('project_id', effProjectId);
-    if (effSubId)     q = q.eq('sub_section_id', effSubId);
+    // sub_section_id may be a comma-separated list (multi-select filter)
+    if (effSubId) {
+      const subIds = String(effSubId).split(',').map(n => parseInt(n)).filter(Number.isInteger);
+      if (subIds.length > 1)        q = q.in('sub_section_id', subIds);
+      else if (subIds.length === 1) q = q.eq('sub_section_id', subIds[0]);
+    }
     if (from)         q = q.gte('activity_date', from);
     if (to)           q = q.lte('activity_date', to);
 

@@ -82,27 +82,49 @@ export default function ExternalGrievances({ user }) {
   const [closeSolution, setCloseSolution] = useState('');
   const [closeError, setCloseError] = useState('');
 
-  // Filters
+  // Filters — sub_section_ids is an array so several sub-sections can be picked at once
   const [filters, setFilters] = useState({
-    project_id: '', sub_section_id: '', escalation_level: '', from: '', to: '',
+    project_id: '', sub_section_ids: [], escalation_level: '', from: '', to: '',
     risk_significance: '', nature_of_grievance: '',
   });
   const [search, setSearch] = useState('');
   const [natureOptions, setNatureOptions] = useState([]);
+  const [subDropdownOpen, setSubDropdownOpen] = useState(false);
 
   const allSubSections = projects.flatMap(p =>
     (p.grv_sub_sections || []).map(s => ({ ...s, projectId: p.id }))
   ).filter(s => !filters.project_id || s.projectId === parseInt(filters.project_id));
 
+  function toggleSubSection(id) {
+    const sid = String(id);
+    setFilters(f => ({
+      ...f,
+      sub_section_ids: f.sub_section_ids.includes(sid)
+        ? f.sub_section_ids.filter(x => x !== sid)
+        : [...f.sub_section_ids, sid],
+    }));
+  }
+
+  const selectedSubs = allSubSections.filter(s => filters.sub_section_ids.includes(String(s.id)));
+  const subSummary = selectedSubs.length === 0 ? 'Sub Section — All'
+    : selectedSubs.length <= 2 ? selectedSubs.map(s => s.name).join(', ')
+    : `${selectedSubs.length} sub-sections`;
+
+  const hasActiveFilters = Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : Boolean(v));
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+      Object.entries(filters).forEach(([k, v]) => {
+        if (Array.isArray(v)) { if (v.length) params.set('sub_section_id', v.join(',')); }
+        else if (v) params.set(k, v);
+      });
       if (search) params.set('search', search);
       // Activities share the project / sub-section / date filters
       const actParams = new URLSearchParams();
-      ['project_id','sub_section_id','from','to'].forEach(k => { if (filters[k]) actParams.set(k, filters[k]); });
+      ['project_id','from','to'].forEach(k => { if (filters[k]) actParams.set(k, filters[k]); });
+      if (filters.sub_section_ids.length) actParams.set('sub_section_id', filters.sub_section_ids.join(','));
       const [gRes, sRes, pRes, aRes] = await Promise.all([
         api.get(`/grievances?${params}`),
         api.get('/grievances/stats/summary'),
@@ -264,18 +286,43 @@ export default function ExternalGrievances({ user }) {
             {/* Filters */}
             <div className="flex flex-wrap gap-2 flex-1">
               {!isAuditor && (
-                <select value={filters.project_id} onChange={e => setFilters(f=>({...f, project_id: e.target.value, sub_section_id: ''}))}
+                <select value={filters.project_id} onChange={e => setFilters(f=>({...f, project_id: e.target.value, sub_section_ids: []}))}
                   className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
                   <option value="">Project — All</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               )}
               {!isAuditor && (
-                <select value={filters.sub_section_id} onChange={e => setFilters(f=>({...f, sub_section_id: e.target.value}))}
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
-                  <option value="">Sub Section — All</option>
-                  {allSubSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <div className="relative">
+                  <button type="button" onClick={() => setSubDropdownOpen(o => !o)}
+                    className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[160px] text-left flex items-center justify-between gap-2">
+                    <span className={selectedSubs.length ? 'text-gray-800 font-medium' : 'text-gray-500'}>{subSummary}</span>
+                    <span className="text-gray-400 text-xs">▾</span>
+                  </button>
+                  {subDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setSubDropdownOpen(false)} />
+                      <div className="absolute z-40 mt-1 w-60 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-1">
+                        {allSubSections.length === 0 && (
+                          <p className="px-3 py-2 text-xs text-gray-400">No sub-sections{filters.project_id ? ' for this project' : ''}.</p>
+                        )}
+                        {allSubSections.map(s => (
+                          <label key={s.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 rounded-md hover:bg-amber-50 cursor-pointer">
+                            <input type="checkbox" checked={filters.sub_section_ids.includes(String(s.id))}
+                              onChange={() => toggleSubSection(s.id)} className="accent-[#1a3c5e]" />
+                            {s.name}
+                          </label>
+                        ))}
+                        {filters.sub_section_ids.length > 0 && (
+                          <button onClick={() => setFilters(f => ({...f, sub_section_ids: []}))}
+                            className="w-full mt-1 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-md text-left">
+                            Clear selection
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               {isAuditor && auditScopeName && (
                 <span className="px-3 py-2 text-sm font-bold text-[#1a3c5e] bg-amber-50 border border-amber-200 rounded-lg">
@@ -296,8 +343,8 @@ export default function ExternalGrievances({ user }) {
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
               <input type="date" value={filters.to} onChange={e => setFilters(f=>({...f, to: e.target.value}))}
                 className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]" />
-              {Object.values(filters).some(Boolean) && (
-                <button onClick={() => setFilters({project_id:'',sub_section_id:'',escalation_level:'',from:'',to:'',risk_significance:'',nature_of_grievance:''})}
+              {hasActiveFilters && (
+                <button onClick={() => setFilters({project_id:'',sub_section_ids:[],escalation_level:'',from:'',to:'',risk_significance:'',nature_of_grievance:''})}
                   className="px-3 py-2 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
                   Clear Filters
                 </button>
