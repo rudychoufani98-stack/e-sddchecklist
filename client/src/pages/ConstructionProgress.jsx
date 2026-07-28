@@ -71,6 +71,8 @@ export default function ConstructionProgress() {
   // Dashboard filters — no automatic filter; default shows latest cumulative data across all periods
   const [selPeriod,  setSelPeriod]  = useState('');
   const [selProject, setSelProject] = useState('');
+  const [selSubs,    setSelSubs]    = useState([]);      // sub-section multi-select
+  const [subFilterOpen, setSubFilterOpen] = useState(false);
 
   // Trend tab project filter
   const [trendProject, setTrendProject] = useState('');
@@ -116,10 +118,23 @@ export default function ConstructionProgress() {
     setEpGrid(grid);
   }, [epPeriod, epProject, allData]);
 
-  // Derived data for dashboard (period + project filters only)
+  // Sub-section choices offered by the filter, narrowed by the selected project
+  const subOptions = [...new Set(allData
+    .filter(r => !selProject || r.project === selProject)
+    .map(r => r.sub_section))].filter(Boolean).sort(bySectionOrder);
+
+  function toggleSub(s) {
+    setSelSubs(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  }
+  const subSummary = selSubs.length === 0 ? 'Sub-sections — All'
+    : selSubs.length <= 3 ? selSubs.join(', ')
+    : `${selSubs.length} sub-sections`;
+
+  // Derived data for dashboard (period + project + sub-section filters)
   const dashDataRaw = allData.filter(r =>
     (!selPeriod  || r.reporting_period === selPeriod) &&
-    (!selProject || r.project === selProject)
+    (!selProject || r.project === selProject) &&
+    (!selSubs.length || selSubs.includes(r.sub_section))
   );
 
   // When no specific period is selected, collapse to the LATEST value per
@@ -243,18 +258,48 @@ export default function ConstructionProgress() {
             {/* Filter bar */}
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm px-5 py-3.5 flex flex-wrap gap-3 items-center">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filters</span>
-              <select value={selProject} onChange={e => setSelProject(e.target.value)}
+              <select value={selProject} onChange={e => { setSelProject(e.target.value); setSelSubs([]); }}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-medium text-slate-700">
                 <option value="">All Projects</option>
                 {structure.projects.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
+              <div className="relative">
+                <button type="button" onClick={() => setSubFilterOpen(o => !o)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[160px] text-left flex items-center justify-between gap-2 font-medium text-slate-700">
+                  <span className={selSubs.length ? 'text-slate-800' : 'text-slate-500'}>{subSummary}</span>
+                  <span className="text-slate-400 text-xs">▾</span>
+                </button>
+                {subFilterOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setSubFilterOpen(false)} />
+                    <div className="absolute z-40 mt-1 w-56 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-1">
+                      {subOptions.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-400">No sub-sections{selProject ? ' for this project' : ''}.</p>
+                      )}
+                      {subOptions.map(s => (
+                        <label key={s} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 rounded-md hover:bg-amber-50 cursor-pointer">
+                          <input type="checkbox" checked={selSubs.includes(s)}
+                            onChange={() => toggleSub(s)} className="accent-[#1a3c5e]" />
+                          {s}
+                        </label>
+                      ))}
+                      {selSubs.length > 0 && (
+                        <button onClick={() => setSelSubs([])}
+                          className="w-full mt-1 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-md text-left">
+                          Clear selection
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
               <select value={selPeriod} onChange={e => setSelPeriod(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] bg-white font-medium text-slate-700">
                 <option value="">All Periods (latest)</option>
                 {periods.map(p => <option key={p} value={p}>{fmtPeriod(p)}</option>)}
               </select>
-              {(selPeriod || selProject) && (
-                <button onClick={() => { setSelPeriod(''); setSelProject(''); }}
+              {(selPeriod || selProject || selSubs.length > 0) && (
+                <button onClick={() => { setSelPeriod(''); setSelProject(''); setSelSubs([]); }}
                   className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50">Clear</button>
               )}
               <span className="ml-auto text-xs text-slate-400">{dashData.length} activities · {structure.projects.length} projects</span>
