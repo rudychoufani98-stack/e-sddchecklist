@@ -171,21 +171,32 @@ router.post('/', async (req, res) => {
       complaint_relationship, community_name, nature_type, nature_of_grievance,
       issue_description, proposed_resolution, deadline,
       date_of_acknowledgment, next_follow_up_date, pdca, lesson_learned,
+      status, risk_significance, priority_level, escalation_level, follow_up_required,
     } = req.body;
 
     // Validate field lengths
     if (issue_description && issue_description.length > 5000)
       return res.status(400).json({ error: 'issue_description too long (max 5000 chars)' });
 
+    // Form-selected values are honored only when they match an allowed value;
+    // anything else falls back to the safe default.
+    const VALID = {
+      status:            ['open', 'closed'],
+      risk_significance: ['low', 'medium', 'high'],
+      priority_level:    ['low', 'medium', 'high'],
+      escalation_level:  ['level_1_site_team', 'level_2_project_manager', 'level_3_senior_management', 'level_4_external_mediator'],
+    };
+    const safeStatus = VALID.status.includes(status) ? status : 'open';
+
     const payload = {
       reference_no: refNo,
       submitted_by: req.user.username,
-      // Status, risk, escalation, priority always start at defaults — not client-controlled
-      status: 'open',
-      risk_significance: 'low',
-      priority_level: 'low',
-      escalation_level: 'level_1_site_team',
-      follow_up_required: false,
+      status: safeStatus,
+      closed_at: safeStatus === 'closed' ? new Date().toISOString() : null,
+      risk_significance: VALID.risk_significance.includes(risk_significance) ? risk_significance : 'low',
+      priority_level:    VALID.priority_level.includes(priority_level) ? priority_level : 'low',
+      escalation_level:  VALID.escalation_level.includes(escalation_level) ? escalation_level : 'level_1_site_team',
+      follow_up_required: follow_up_required === true,
       // Allowed submitter fields
       date_of_receipt, date_of_registration, project_id, sub_section_id,
       complaint_relationship, community_name, nature_type, nature_of_grievance,
