@@ -1,13 +1,14 @@
 const express = require('express');
 const path = require('path');
 const supabase = require('../db');
-const { requireAuth, requireAdmin } = require('../auth');
+const { requireAuth, requireAdmin, denyAuditor } = require('../auth');
 const router = express.Router();
 
 const BUCKET = 'data-room';
 const ALLOWED_EXT = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg', '.kmz', '.zip'];
 
 router.use(requireAuth);
+router.use(denyAuditor);
 
 router.get('/', async (req, res) => {
   try {

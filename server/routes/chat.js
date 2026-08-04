@@ -1,9 +1,10 @@
 const express = require('express');
 const supabase = require('../db');
-const { requireAuth } = require('../auth');
+const { requireAuth, denyAuditor } = require('../auth');
 const router = express.Router();
 
 router.use(requireAuth);
+router.use(denyAuditor);
 
 // GET recent messages (oldest → newest)
 router.get('/', async (req, res) => {

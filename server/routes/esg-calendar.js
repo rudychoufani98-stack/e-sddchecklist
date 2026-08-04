@@ -1,9 +1,10 @@
 const express = require('express');
 const supabase = require('../db');
-const { requireAuth, requireAdmin } = require('../auth');
+const { requireAuth, requireAdmin, denyAuditor } = require('../auth');
 const router = express.Router();
 
 router.use(requireAuth);
+router.use(denyAuditor);
 
 // GET all calendar events (optionally filtered by project or date range)
 router.get('/', async (req, res) => {

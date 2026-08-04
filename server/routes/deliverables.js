@@ -1,9 +1,10 @@
 const express = require('express');
 const supabase = require('../db');
-const { requireAuth, requireAdmin } = require('../auth');
+const { requireAuth, requireAdmin, denyAuditor } = require('../auth');
 const router = express.Router();
 
 router.use(requireAuth);
+router.use(denyAuditor);
 
 router.patch('/:id', requireAdmin, async (req, res) => {
   try {
