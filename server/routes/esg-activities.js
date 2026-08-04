@@ -1,18 +1,10 @@
 const express = require('express');
 const supabase = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
+const { auditorScope, applyScope } = require('../scope');
 const router = express.Router();
 
 router.use(requireAuth);
-
-// Returns the forced scope for auditor (lender) accounts, or null for everyone else.
-function auditorScope(req) {
-  if (req.user?.role !== 'auditor') return null;
-  return {
-    project_id: req.user.scope_project_id ?? null,
-    sub_section_id: req.user.scope_sub_section_id ?? null,
-  };
-}
 
 // GET all activities with filters
 router.get('/', async (req, res) => {
@@ -23,14 +15,13 @@ router.get('/', async (req, res) => {
       .select('*, grv_projects(name), grv_sub_sections(name)')
       .order('activity_date', { ascending: false });
 
-    const scope = auditorScope(req);
-    const effProjectId = scope ? scope.project_id : project_id;
-    const effSubId     = scope ? scope.sub_section_id : sub_section_id;
+    // Auditor scope first; the client's own filters can only narrow it further.
+    q = applyScope(q, auditorScope(req));
 
-    if (effProjectId) q = q.eq('project_id', effProjectId);
+    if (project_id) q = q.eq('project_id', project_id);
     // sub_section_id may be a comma-separated list (multi-select filter)
-    if (effSubId) {
-      const subIds = String(effSubId).split(',').map(n => parseInt(n)).filter(Number.isInteger);
+    if (sub_section_id) {
+      const subIds = String(sub_section_id).split(',').map(n => parseInt(n)).filter(Number.isInteger);
       if (subIds.length > 1)        q = q.in('sub_section_id', subIds);
       else if (subIds.length === 1) q = q.eq('sub_section_id', subIds[0]);
     }

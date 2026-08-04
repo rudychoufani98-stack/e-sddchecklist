@@ -42,6 +42,94 @@ const ROLE_GUIDE = [
   { value: 'consultant_hs',       label: 'Health & Safety Consultant', desc: 'Field account — GPS capture only, locked to the Health & Safety category (red).' },
 ];
 
+// Ticking a project grants the whole project (every section, including ones
+// added later). To grant only certain sections, leave the project unticked and
+// tick the sections underneath it.
+function ScopePicker({ projects, projectIds, subIds, onChange, compact }) {
+  const [open, setOpen] = useState(false);
+
+  function toggleProject(id) {
+    const has = projectIds.includes(id);
+    const proj = projects.find(p => p.id === id);
+    const ownSubIds = (proj?.grv_sub_sections || []).map(s => s.id);
+    onChange({
+      projectIds: has ? projectIds.filter(x => x !== id) : [...projectIds, id],
+      // Selecting a whole project makes its individual sections redundant
+      subIds: has ? subIds : subIds.filter(x => !ownSubIds.includes(x)),
+    });
+  }
+  function toggleSub(id) {
+    onChange({
+      projectIds,
+      subIds: subIds.includes(id) ? subIds.filter(x => x !== id) : [...subIds, id],
+    });
+  }
+
+  const parts = [];
+  projects.forEach(p => {
+    if (projectIds.includes(p.id)) parts.push(`${p.name} (all)`);
+    else {
+      const picked = (p.grv_sub_sections || []).filter(s => subIds.includes(s.id));
+      if (picked.length) parts.push(`${p.name}: ${picked.map(s => s.name).join(', ')}`);
+    }
+  });
+  const summary = parts.length === 0 ? 'Nothing selected'
+    : parts.join(' · ').length <= 48 ? parts.join(' · ')
+    : `${projectIds.length} project${projectIds.length !== 1 ? 's' : ''}, ${subIds.length} section${subIds.length !== 1 ? 's' : ''}`;
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className={`border rounded-lg bg-white text-left flex items-center justify-between gap-2 ${compact ? 'px-2 py-1 text-xs border-gray-200 min-w-[190px]' : 'px-3 py-2 text-sm border-gray-200 min-w-[240px]'}`}>
+        <span className={parts.length ? 'text-gray-800 font-medium' : 'text-gray-400'}>{summary}</span>
+        <span className="text-gray-400 text-xs">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 mt-1 w-72 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg p-2">
+            <p className="px-2 py-1 text-[11px] text-gray-400 leading-snug">
+              Tick a project for full access, or tick only the sections needed.
+            </p>
+            {projects.map(p => {
+              const whole = projectIds.includes(p.id);
+              return (
+                <div key={p.id} className="mb-1.5">
+                  <label className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-amber-50 cursor-pointer">
+                    <input type="checkbox" checked={whole} onChange={() => toggleProject(p.id)} className="accent-[#1a3c5e]" />
+                    <span className="text-sm font-bold text-gray-800">{p.name}</span>
+                    <span className="text-[10px] text-gray-400">whole project</span>
+                  </label>
+                  <div className="ml-6 border-l border-gray-100 pl-2">
+                    {(p.grv_sub_sections || []).length === 0 && (
+                      <p className="px-2 py-1 text-[11px] text-gray-300 italic">no sections</p>
+                    )}
+                    {(p.grv_sub_sections || []).map(s => (
+                      <label key={s.id}
+                        className={`flex items-center gap-2 px-2 py-1 rounded-md text-sm ${whole ? 'opacity-40 cursor-not-allowed' : 'hover:bg-amber-50 cursor-pointer'}`}>
+                        <input type="checkbox" disabled={whole}
+                          checked={whole || subIds.includes(s.id)}
+                          onChange={() => toggleSub(s.id)} className="accent-[#1a3c5e]" />
+                        <span className="text-gray-700">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {(projectIds.length > 0 || subIds.length > 0) && (
+              <button type="button" onClick={() => onChange({ projectIds: [], subIds: [] })}
+                className="w-full mt-1 px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-md text-left">
+                Clear all
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function UserAccess({ user }) {
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -49,7 +137,8 @@ export default function UserAccess({ user }) {
   const [msg, setMsg] = useState(null);
 
   // New user form
-  const [nu, setNu] = useState({ username: '', password: '', role: 'viewer', scope_project_id: '', scope_sub_section_id: '' });
+  const EMPTY_NU = { username: '', password: '', role: 'viewer', projectIds: [], subIds: [] };
+  const [nu, setNu] = useState(EMPTY_NU);
   const [creating, setCreating] = useState(false);
 
   // Reset-password modal
@@ -68,11 +157,8 @@ export default function UserAccess({ user }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  function projName(id) { return projects.find(p => p.id === id)?.name || ''; }
-  function subName(pid, sid) {
-    const p = projects.find(x => x.id === pid);
-    return (p?.grv_sub_sections || []).find(s => s.id === sid)?.name || '';
-  }
+  // True once scripts/add-auditor-multi-scope.sql has been run in Supabase
+  const multiScopeEnabled = users.some(u => u.multi_scope_enabled);
 
   // Guard: only owner
   if (user && user.username !== OWNER) return <Navigate to="/" />;
@@ -81,17 +167,18 @@ export default function UserAccess({ user }) {
 
   async function createUser(e) {
     e.preventDefault();
-    if (nu.role === 'auditor' && !nu.scope_project_id) { flash('error', 'Select a project for the auditor.'); return; }
+    if (nu.role === 'auditor' && !nu.projectIds.length && !nu.subIds.length) {
+      flash('error', 'Choose at least one project or section for the auditor.'); return;
+    }
     setCreating(true);
     try {
-      const payload = {
+      await api.post('/users', {
         username: nu.username, password: nu.password, role: nu.role,
-        scope_project_id: nu.role === 'auditor' ? Number(nu.scope_project_id) : null,
-        scope_sub_section_id: nu.role === 'auditor' && nu.scope_sub_section_id ? Number(nu.scope_sub_section_id) : null,
-      };
-      await api.post('/users', payload);
+        scope_project_ids:     nu.role === 'auditor' ? nu.projectIds : [],
+        scope_sub_section_ids: nu.role === 'auditor' ? nu.subIds : [],
+      });
       flash('success', `User "${nu.username.toLowerCase()}" created.`);
-      setNu({ username: '', password: '', role: 'viewer', scope_project_id: '', scope_sub_section_id: '' });
+      setNu(EMPTY_NU);
       load();
     } catch (err) { flash('error', err.response?.data?.error || 'Could not create user.'); }
     setCreating(false);
@@ -101,17 +188,20 @@ export default function UserAccess({ user }) {
     try {
       const body = { role };
       // Auditor needs a scope — default to the first project if none set yet
-      if (role === 'auditor') body.scope_project_id = u.scope_project_id || projects[0]?.id;
+      if (role === 'auditor' && !u.scope_project_ids?.length && !u.scope_sub_section_ids?.length) {
+        body.scope_project_ids = projects[0] ? [projects[0].id] : [];
+        body.scope_sub_section_ids = [];
+      }
       await api.patch(`/users/${encodeURIComponent(u.username)}`, body);
       load();
     } catch (err) { flash('error', err.response?.data?.error || 'Could not update role.'); }
   }
 
-  async function changeScope(u, field, value) {
+  async function changeScope(u, { projectIds, subIds }) {
     try {
-      const body = { [field]: value ? Number(value) : null };
-      if (field === 'scope_project_id') body.scope_sub_section_id = null; // reset sub when project changes
-      await api.patch(`/users/${encodeURIComponent(u.username)}`, body);
+      await api.patch(`/users/${encodeURIComponent(u.username)}`, {
+        scope_project_ids: projectIds, scope_sub_section_ids: subIds,
+      });
       load();
     } catch (err) { flash('error', err.response?.data?.error || 'Could not update scope.'); }
   }
@@ -176,33 +266,17 @@ export default function UserAccess({ user }) {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1">Role</label>
-            <select value={nu.role} onChange={e => setNu(s => ({ ...s, role: e.target.value, scope_project_id: '', scope_sub_section_id: '' }))}
+            <select value={nu.role} onChange={e => setNu(s => ({ ...s, role: e.target.value, projectIds: [], subIds: [] }))}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
           {nu.role === 'auditor' && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">Audited Project *</label>
-                <select value={nu.scope_project_id} onChange={e => setNu(s => ({ ...s, scope_project_id: e.target.value, scope_sub_section_id: '' }))}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e]">
-                  <option value="">Select project…</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">Sub-Section (optional)</label>
-                <select value={nu.scope_sub_section_id} onChange={e => setNu(s => ({ ...s, scope_sub_section_id: e.target.value }))}
-                  disabled={!nu.scope_project_id}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] disabled:opacity-50">
-                  <option value="">Whole project</option>
-                  {(projects.find(p => p.id === Number(nu.scope_project_id))?.grv_sub_sections || []).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Projects &amp; Sections *</label>
+              <ScopePicker projects={projects} projectIds={nu.projectIds} subIds={nu.subIds}
+                onChange={({ projectIds, subIds }) => setNu(s => ({ ...s, projectIds, subIds }))} />
+            </div>
           )}
           <button type="submit" disabled={creating}
             className="px-4 py-2 bg-[#1a3c5e] text-white text-sm font-bold rounded-lg hover:bg-[#122d47] disabled:opacity-50 transition-colors">
@@ -211,7 +285,13 @@ export default function UserAccess({ user }) {
         </form>
         {nu.role === 'auditor' && (
           <p className="mt-3 text-xs text-purple-600 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
-            🔒 Auditor accounts (for lenders) see <strong>only the Grievances dashboard</strong>, read-only, restricted to the selected project{nu.scope_sub_section_id ? ' / sub-section' : ''}.
+            🔒 Auditor accounts (for lenders) see <strong>only the Grievances dashboard</strong>, read-only, restricted to the projects and sections ticked above. You can grant several — for example all of one project plus a single section of another.
+          </p>
+        )}
+        {nu.role === 'auditor' && users.length > 0 && !multiScopeEnabled && (
+          <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            ⚠️ Only <strong>one</strong> project or section can be saved until the database migration is run
+            (<code>scripts/add-auditor-multi-scope.sql</code> in the Supabase SQL Editor).
           </p>
         )}
         {nu.role === 'construction' && (
@@ -266,21 +346,9 @@ export default function UserAccess({ user }) {
                   </td>
                   <td className="px-5 py-3">
                     {u.role === 'auditor' ? (
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        <select value={u.scope_project_id || ''} onChange={e => changeScope(u, 'scope_project_id', e.target.value)}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white">
-                          <option value="">— project —</option>
-                          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <select value={u.scope_sub_section_id || ''} onChange={e => changeScope(u, 'scope_sub_section_id', e.target.value)}
-                          disabled={!u.scope_project_id}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white disabled:opacity-50">
-                          <option value="">Whole project</option>
-                          {(projects.find(p => p.id === u.scope_project_id)?.grv_sub_sections || []).map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <ScopePicker compact projects={projects}
+                        projectIds={u.scope_project_ids || []} subIds={u.scope_sub_section_ids || []}
+                        onChange={sel => changeScope(u, sel)} />
                     ) : (
                       <span className="text-xs text-gray-300">—</span>
                     )}

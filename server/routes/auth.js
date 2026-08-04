@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const supabase = require('../db');
+const { scopeClaims } = require('../scope');
 const router = express.Router();
 
 if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is not set');
@@ -48,14 +49,11 @@ router.post('/login', loginRateLimit, async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  // Auditor (lender) accounts are locked to the projects / sections granted to them
+  const scope = scopeClaims(user);
+
   const token = jwt.sign(
-    {
-      username: user.username,
-      role: user.role,
-      // Auditor (lender) accounts are locked to one project / sub-section
-      scope_project_id: user.scope_project_id ?? null,
-      scope_sub_section_id: user.scope_sub_section_id ?? null,
-    },
+    { username: user.username, role: user.role, ...scope },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -64,8 +62,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
     token,
     username: user.username,
     role: user.role,
-    scope_project_id: user.scope_project_id ?? null,
-    scope_sub_section_id: user.scope_sub_section_id ?? null,
+    ...scope,
   });
 });
 

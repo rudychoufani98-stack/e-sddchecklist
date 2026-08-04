@@ -16,6 +16,8 @@ export default function Login({ onLogin }) {
       const u = {
         username: res.data.username,
         role: res.data.role,
+        scope_project_ids: res.data.scope_project_ids ?? [],
+        scope_sub_section_ids: res.data.scope_sub_section_ids ?? [],
         scope_project_id: res.data.scope_project_id ?? null,
         scope_sub_section_id: res.data.scope_sub_section_id ?? null,
       };

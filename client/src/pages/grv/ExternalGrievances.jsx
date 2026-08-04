@@ -247,16 +247,21 @@ export default function ExternalGrievances({ user }) {
     { key: 'activities', label: `ESG Activities (${activities.length})` },
   ];
 
-  // For auditor (lender) accounts: the project/sub-section they are restricted to
+  // For auditor (lender) accounts: what they were granted. The project list from
+  // the API is already trimmed to their scope, so it is the source of truth.
   const auditScopeName = isAuditor ? (() => {
-    const p = projects[0];
-    if (!p) return '';
-    if (user.scope_sub_section_id) {
-      const ss = (p.grv_sub_sections || []).find(s => s.id === user.scope_sub_section_id);
-      return ss ? `${p.name} — ${ss.name}` : p.name;
-    }
-    return p.name;
+    const wholeProjects = user.scope_project_ids || (user.scope_project_id ? [user.scope_project_id] : []);
+    return projects.map(p => wholeProjects.includes(p.id)
+      ? p.name
+      : `${p.name} — ${(p.grv_sub_sections || []).map(s => s.name).join(', ')}`
+    ).join(' · ');
   })() : '';
+
+  // An auditor granted several projects/sections still gets the filters, limited
+  // to what they may see. With a single section there is nothing to choose.
+  const auditorHasChoice = projects.length > 1 ||
+    projects.reduce((n, p) => n + (p.grv_sub_sections || []).length, 0) > 1;
+  const showScopeFilters = !isAuditor || auditorHasChoice;
 
   return (
     <div className="min-h-screen" style={{ background: '#FDF6E3' }}>
@@ -285,14 +290,14 @@ export default function ExternalGrievances({ user }) {
 
             {/* Filters */}
             <div className="flex flex-wrap gap-2 flex-1">
-              {!isAuditor && (
+              {showScopeFilters && (
                 <select value={filters.project_id} onChange={e => setFilters(f=>({...f, project_id: e.target.value, sub_section_ids: []}))}
                   className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[140px]">
                   <option value="">Project — All</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               )}
-              {!isAuditor && (
+              {showScopeFilters && (
                 <div className="relative">
                   <button type="button" onClick={() => setSubDropdownOpen(o => !o)}
                     className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3c5e] min-w-[160px] text-left flex items-center justify-between gap-2">

@@ -1,6 +1,7 @@
 const express = require('express');
 const supabase = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
+const { auditorScope, applyScope, isInScope } = require('../scope');
 const router = express.Router();
 
 router.use(requireAuth);
@@ -14,24 +15,11 @@ async function nextRefNo() {
   return `GRV-${String(num).padStart(3, '0')}`;
 }
 
-// Returns the forced scope for auditor (lender) accounts, or null for everyone else.
-function auditorScope(req) {
-  if (req.user?.role !== 'auditor') return null;
-  return {
-    project_id: req.user.scope_project_id ?? null,
-    sub_section_id: req.user.scope_sub_section_id ?? null,
-  };
-}
-
 // GET dashboard stats — MUST be before /:id
 router.get('/stats/summary', async (req, res) => {
   try {
     let sq = supabase.from('grievances').select('*');
-    const scope = auditorScope(req);
-    if (scope) {
-      if (scope.project_id) sq = sq.eq('project_id', scope.project_id);
-      if (scope.sub_section_id) sq = sq.eq('sub_section_id', scope.sub_section_id);
-    }
+    sq = applyScope(sq, auditorScope(req));
     const { data: all, error } = await sq;
     if (error) throw error;
 
@@ -95,16 +83,15 @@ router.get('/', async (req, res) => {
       .select('*, grv_projects(name), grv_sub_sections(name)')
       .order('created_at', { ascending: false });
 
-    // Auditor (lender) accounts are forced to their assigned scope and may not
-    // widen it via query params.
-    const scope = auditorScope(req);
-    const effProjectId = scope ? scope.project_id : project_id;
-    const effSubId     = scope ? scope.sub_section_id : sub_section_id;
+    // Auditor (lender) accounts are confined to their granted scope. Their own
+    // filter choices are applied on top and combine with AND, so they can only
+    // narrow within that scope, never widen beyond it.
+    q = applyScope(q, auditorScope(req));
 
-    if (effProjectId)      q = q.eq('project_id', effProjectId);
+    if (project_id)        q = q.eq('project_id', project_id);
     // sub_section_id may be a comma-separated list (multi-select filter)
-    if (effSubId) {
-      const subIds = String(effSubId).split(',').map(n => parseInt(n)).filter(Number.isInteger);
+    if (sub_section_id) {
+      const subIds = String(sub_section_id).split(',').map(n => parseInt(n)).filter(Number.isInteger);
       if (subIds.length > 1)        q = q.in('sub_section_id', subIds);
       else if (subIds.length === 1) q = q.eq('sub_section_id', subIds[0]);
     }
@@ -149,11 +136,7 @@ router.get('/:id', async (req, res) => {
       .eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Not found' });
     // Enforce auditor scope on direct record access
-    const scope = auditorScope(req);
-    if (scope) {
-      if (scope.project_id && data.project_id !== scope.project_id) return res.status(404).json({ error: 'Not found' });
-      if (scope.sub_section_id && data.sub_section_id !== scope.sub_section_id) return res.status(404).json({ error: 'Not found' });
-    }
+    if (!isInScope(data, auditorScope(req))) return res.status(404).json({ error: 'Not found' });
     res.json({ ...data, project_name: data.grv_projects?.name, sub_section_name: data.grv_sub_sections?.name });
   } catch (err) {
     console.error('GET /grievances/:id error:', err);

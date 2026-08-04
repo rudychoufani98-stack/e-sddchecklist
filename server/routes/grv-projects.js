@@ -1,20 +1,31 @@
 const express = require('express');
 const supabase = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
+const { auditorScope } = require('../scope');
 const router = express.Router();
 
 router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   try {
-    let q = supabase.from('grv_projects').select('*, grv_sub_sections(*)').order('id');
-    // Auditor (lender) accounts only see the project they are assigned to
-    if (req.user?.role === 'auditor' && req.user.scope_project_id) {
-      q = q.eq('id', req.user.scope_project_id);
-    }
-    const { data, error } = await q;
+    const { data, error } = await supabase
+      .from('grv_projects').select('*, grv_sub_sections(*)').order('id');
     if (error) throw error;
-    res.json(data);
+
+    // Auditor (lender) accounts only see the projects they were granted, and
+    // within a project only the sections they were granted.
+    const scope = auditorScope(req);
+    if (!scope) return res.json(data);
+
+    const visible = (data || []).reduce((acc, p) => {
+      const wholeProject = scope.projectIds.includes(p.id);
+      const subs = (p.grv_sub_sections || []).filter(s =>
+        wholeProject || scope.subSectionIds.includes(s.id));
+      if (wholeProject || subs.length) acc.push({ ...p, grv_sub_sections: subs });
+      return acc;
+    }, []);
+
+    res.json(visible);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
